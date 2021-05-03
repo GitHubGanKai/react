@@ -42,6 +42,7 @@ import {
   copyWithDelete,
   copyWithRename,
   copyWithSet,
+  getEffectDurations,
 } from './utils';
 import {
   __DEBUG__,
@@ -80,6 +81,8 @@ import {
 } from './ReactSymbols';
 import {format} from './utils';
 import {enableProfilerChangedHookIndices} from 'react-devtools-feature-flags';
+import is from 'shared/objectIs';
+import isArray from 'shared/isArray';
 
 import type {Fiber} from 'react-reconciler/src/ReactInternalTypes';
 import type {
@@ -90,21 +93,19 @@ import type {
   InspectedElementPayload,
   InstanceAndStyle,
   NativeType,
-  Owner,
   PathFrame,
   PathMatch,
   ProfilingDataBackend,
   ProfilingDataForRootBackend,
   ReactRenderer,
   RendererInterface,
+  SerializedElement,
   WorkTagMap,
 } from './types';
-import type {Interaction} from 'react-devtools-shared/src/devtools/views/Profiler/types';
 import type {
   ComponentFilter,
   ElementType,
 } from 'react-devtools-shared/src/types';
-import is from 'shared/objectIs';
 
 type getDisplayNameForFiberType = (fiber: Fiber) => string | null;
 type getTypeSymbolType = (type: any) => Symbol | number;
@@ -368,6 +369,7 @@ export function getInternalReactConstants(
     LegacyHiddenComponent,
     MemoComponent,
     OffscreenComponent,
+    Profiler,
     ScopeComponent,
     SimpleMemoComponent,
     SuspenseComponent,
@@ -441,6 +443,8 @@ export function getInternalReactConstants(
         return 'Scope';
       case SuspenseListComponent:
         return 'SuspenseList';
+      case Profiler:
+        return 'Profiler';
       default:
         const typeSymbol = getTypeSymbol(type);
 
@@ -498,13 +502,19 @@ export function attach(
   renderer: ReactRenderer,
   global: Object,
 ): RendererInterface {
+  // Newer versions of the reconciler package also specific reconciler version.
+  // If that version number is present, use it.
+  // Third party renderer versions may not match the reconciler version,
+  // and the latter is what's important in terms of tags and symbols.
+  const version = renderer.reconcilerVersion || renderer.version;
+
   const {
     getDisplayNameForFiber,
     getTypeSymbol,
     ReactPriorityLevels,
     ReactTypeOfWork,
     ReactTypeOfSideEffect,
-  } = getInternalReactConstants(renderer.version);
+  } = getInternalReactConstants(version);
   const {Incomplete, NoFlags, PerformedWork, Placement} = ReactTypeOfSideEffect;
   const {
     CacheComponent,
@@ -1137,7 +1147,7 @@ export function attach(
       memoizedState.hasOwnProperty('create') &&
       memoizedState.hasOwnProperty('destroy') &&
       memoizedState.hasOwnProperty('deps') &&
-      (memoizedState.deps === null || Array.isArray(memoizedState.deps)) &&
+      (memoizedState.deps === null || isArray(memoizedState.deps)) &&
       memoizedState.hasOwnProperty('next')
     );
   }
@@ -1637,102 +1647,100 @@ export function attach(
   }
 
   function mountFiberRecursively(
-    fiber: Fiber,
+    firstChild: Fiber,
     parentFiber: Fiber | null,
     traverseSiblings: boolean,
     traceNearestHostComponentUpdate: boolean,
   ) {
-    if (__DEBUG__) {
-      debug('mountFiberRecursively()', fiber, parentFiber);
-    }
-
-    // If we have the tree selection from previous reload, try to match this Fiber.
-    // Also remember whether to do the same for siblings.
-    const mightSiblingsBeOnTrackedPath = updateTrackedPathStateBeforeMount(
-      fiber,
-    );
-
-    const shouldIncludeInTree = !shouldFilterFiber(fiber);
-    if (shouldIncludeInTree) {
-      recordMount(fiber, parentFiber);
-    }
-
-    if (traceUpdatesEnabled) {
-      if (traceNearestHostComponentUpdate) {
-        const elementType = getElementTypeForFiber(fiber);
-        // If an ancestor updated, we should mark the nearest host nodes for highlighting.
-        if (elementType === ElementTypeHostComponent) {
-          traceUpdatesForNodes.add(fiber.stateNode);
-          traceNearestHostComponentUpdate = false;
-        }
+    // Iterate over siblings rather than recursing.
+    // This reduces the chance of stack overflow for wide trees (e.g. lists with many items).
+    let fiber: Fiber | null = firstChild;
+    while (fiber !== null) {
+      if (__DEBUG__) {
+        debug('mountFiberRecursively()', fiber, parentFiber);
       }
 
-      // We intentionally do not re-enable the traceNearestHostComponentUpdate flag in this branch,
-      // because we don't want to highlight every host node inside of a newly mounted subtree.
-    }
+      // If we have the tree selection from previous reload, try to match this Fiber.
+      // Also remember whether to do the same for siblings.
+      const mightSiblingsBeOnTrackedPath = updateTrackedPathStateBeforeMount(
+        fiber,
+      );
 
-    const isSuspense = fiber.tag === ReactTypeOfWork.SuspenseComponent;
-    if (isSuspense) {
-      const isTimedOut = fiber.memoizedState !== null;
-      if (isTimedOut) {
-        // Special case: if Suspense mounts in a timed-out state,
-        // get the fallback child from the inner fragment and mount
-        // it as if it was our own child. Updates handle this too.
-        const primaryChildFragment = fiber.child;
-        const fallbackChildFragment = primaryChildFragment
-          ? primaryChildFragment.sibling
-          : null;
-        const fallbackChild = fallbackChildFragment
-          ? fallbackChildFragment.child
-          : null;
-        if (fallbackChild !== null) {
-          mountFiberRecursively(
-            fallbackChild,
-            shouldIncludeInTree ? fiber : parentFiber,
-            true,
-            traceNearestHostComponentUpdate,
-          );
+      const shouldIncludeInTree = !shouldFilterFiber(fiber);
+      if (shouldIncludeInTree) {
+        recordMount(fiber, parentFiber);
+      }
+
+      if (traceUpdatesEnabled) {
+        if (traceNearestHostComponentUpdate) {
+          const elementType = getElementTypeForFiber(fiber);
+          // If an ancestor updated, we should mark the nearest host nodes for highlighting.
+          if (elementType === ElementTypeHostComponent) {
+            traceUpdatesForNodes.add(fiber.stateNode);
+            traceNearestHostComponentUpdate = false;
+          }
+        }
+
+        // We intentionally do not re-enable the traceNearestHostComponentUpdate flag in this branch,
+        // because we don't want to highlight every host node inside of a newly mounted subtree.
+      }
+
+      const isSuspense = fiber.tag === ReactTypeOfWork.SuspenseComponent;
+      if (isSuspense) {
+        const isTimedOut = fiber.memoizedState !== null;
+        if (isTimedOut) {
+          // Special case: if Suspense mounts in a timed-out state,
+          // get the fallback child from the inner fragment and mount
+          // it as if it was our own child. Updates handle this too.
+          const primaryChildFragment = fiber.child;
+          const fallbackChildFragment = primaryChildFragment
+            ? primaryChildFragment.sibling
+            : null;
+          const fallbackChild = fallbackChildFragment
+            ? fallbackChildFragment.child
+            : null;
+          if (fallbackChild !== null) {
+            mountFiberRecursively(
+              fallbackChild,
+              shouldIncludeInTree ? fiber : parentFiber,
+              true,
+              traceNearestHostComponentUpdate,
+            );
+          }
+        } else {
+          let primaryChild: Fiber | null = null;
+          const areSuspenseChildrenConditionallyWrapped =
+            OffscreenComponent === -1;
+          if (areSuspenseChildrenConditionallyWrapped) {
+            primaryChild = fiber.child;
+          } else if (fiber.child !== null) {
+            primaryChild = fiber.child.child;
+          }
+          if (primaryChild !== null) {
+            mountFiberRecursively(
+              primaryChild,
+              shouldIncludeInTree ? fiber : parentFiber,
+              true,
+              traceNearestHostComponentUpdate,
+            );
+          }
         }
       } else {
-        let primaryChild: Fiber | null = null;
-        const areSuspenseChildrenConditionallyWrapped =
-          OffscreenComponent === -1;
-        if (areSuspenseChildrenConditionallyWrapped) {
-          primaryChild = fiber.child;
-        } else if (fiber.child !== null) {
-          primaryChild = fiber.child.child;
-        }
-        if (primaryChild !== null) {
+        if (fiber.child !== null) {
           mountFiberRecursively(
-            primaryChild,
+            fiber.child,
             shouldIncludeInTree ? fiber : parentFiber,
             true,
             traceNearestHostComponentUpdate,
           );
         }
       }
-    } else {
-      if (fiber.child !== null) {
-        mountFiberRecursively(
-          fiber.child,
-          shouldIncludeInTree ? fiber : parentFiber,
-          true,
-          traceNearestHostComponentUpdate,
-        );
-      }
-    }
 
-    // We're exiting this Fiber now, and entering its siblings.
-    // If we have selection to restore, we might need to re-activate tracking.
-    updateTrackedPathStateAfterMount(mightSiblingsBeOnTrackedPath);
+      // We're exiting this Fiber now, and entering its siblings.
+      // If we have selection to restore, we might need to re-activate tracking.
+      updateTrackedPathStateAfterMount(mightSiblingsBeOnTrackedPath);
 
-    if (traverseSiblings && fiber.sibling !== null) {
-      mountFiberRecursively(
-        fiber.sibling,
-        parentFiber,
-        true,
-        traceNearestHostComponentUpdate,
-      );
+      fiber = traverseSiblings ? fiber.sibling : null;
     }
   }
 
@@ -2125,6 +2133,22 @@ export function attach(
     // We don't patch any methods so there is no cleanup.
   }
 
+  function rootSupportsProfiling(root) {
+    if (root.memoizedInteractions != null) {
+      // v16 builds include this field for the scheduler/tracing API.
+      return true;
+    } else if (
+      root.current != null &&
+      root.current.hasOwnProperty('treeBaseDuration')
+    ) {
+      // The scheduler/tracing API was removed in v17 though
+      // so we need to check a non-root Fiber.
+      return true;
+    } else {
+      return false;
+    }
+  }
+
   function flushInitialOperations() {
     const localPendingOperationsQueue = pendingOperationsQueue;
 
@@ -2150,44 +2174,19 @@ export function attach(
         currentRootID = getFiberID(getPrimaryFiber(root.current));
         setRootPseudoKey(currentRootID, root.current);
 
-        // Checking root.memoizedInteractions handles multi-renderer edge-case-
-        // where some v16 renderers support profiling and others don't.
-        if (isProfiling && root.memoizedInteractions != null) {
-          // Profiling durations are only available for certain builds.
-          // If available, they'll be stored on the HostRoot.
-          let effectDuration = null;
-          let passiveEffectDuration = null;
-          const hostRoot = root.current;
-          if (hostRoot != null) {
-            const stateNode = hostRoot.stateNode;
-            if (stateNode != null) {
-              effectDuration =
-                stateNode.effectDuration != null
-                  ? stateNode.effectDuration
-                  : null;
-              passiveEffectDuration =
-                stateNode.passiveEffectDuration != null
-                  ? stateNode.passiveEffectDuration
-                  : null;
-            }
-          }
-
-          // If profiling is active, store commit time and duration, and the current interactions.
+        // Handle multi-renderer edge-case where only some v16 renderers support profiling.
+        if (isProfiling && rootSupportsProfiling(root)) {
+          // If profiling is active, store commit time and duration.
           // The frontend may request this information after profiling has stopped.
           currentCommitProfilingMetadata = {
             changeDescriptions: recordChangeDescriptions ? new Map() : null,
             durations: [],
             commitTime: getCurrentTime() - profilingStartTime,
-            interactions: Array.from(root.memoizedInteractions).map(
-              (interaction: Interaction) => ({
-                ...interaction,
-                timestamp: interaction.timestamp - profilingStartTime,
-              }),
-            ),
             maxActualDuration: 0,
             priorityLevel: null,
-            effectDuration,
-            passiveEffectDuration,
+            updaters: getUpdatersList(root),
+            effectDuration: null,
+            passiveEffectDuration: null,
           };
         }
 
@@ -2198,11 +2197,29 @@ export function attach(
     }
   }
 
+  function getUpdatersList(root): Array<SerializedElement> | null {
+    return root.memoizedUpdaters != null
+      ? Array.from(root.memoizedUpdaters).map(fiberToSerializedElement)
+      : null;
+  }
+
   function handleCommitFiberUnmount(fiber) {
     // This is not recursive.
     // We can't traverse fibers after unmounting so instead
     // we rely on React telling us about each unmount.
     recordUnmount(fiber, false);
+  }
+
+  function handlePostCommitFiberRoot(root) {
+    if (isProfiling && rootSupportsProfiling(root)) {
+      if (currentCommitProfilingMetadata !== null) {
+        const {effectDuration, passiveEffectDuration} = getEffectDurations(
+          root,
+        );
+        currentCommitProfilingMetadata.effectDuration = effectDuration;
+        currentCommitProfilingMetadata.passiveEffectDuration = passiveEffectDuration;
+      }
+    }
   }
 
   function handleCommitFiberRoot(root, priorityLevel) {
@@ -2221,45 +2238,26 @@ export function attach(
       traceUpdatesForNodes.clear();
     }
 
-    // Checking root.memoizedInteractions handles multi-renderer edge-case-
-    // where some v16 renderers support profiling and others don't.
-    const isProfilingSupported = root.memoizedInteractions != null;
+    // Handle multi-renderer edge-case where only some v16 renderers support profiling.
+    const isProfilingSupported = rootSupportsProfiling(root);
 
     if (isProfiling && isProfilingSupported) {
-      // Profiling durations are only available for certain builds.
-      // If available, they'll be stored on the HostRoot.
-      let effectDuration = null;
-      let passiveEffectDuration = null;
-      const hostRoot = root.current;
-      if (hostRoot != null) {
-        const stateNode = hostRoot.stateNode;
-        if (stateNode != null) {
-          effectDuration =
-            stateNode.effectDuration != null ? stateNode.effectDuration : null;
-          passiveEffectDuration =
-            stateNode.passiveEffectDuration != null
-              ? stateNode.passiveEffectDuration
-              : null;
-        }
-      }
-
-      // If profiling is active, store commit time and duration, and the current interactions.
+      // If profiling is active, store commit time and duration.
       // The frontend may request this information after profiling has stopped.
       currentCommitProfilingMetadata = {
         changeDescriptions: recordChangeDescriptions ? new Map() : null,
         durations: [],
         commitTime: getCurrentTime() - profilingStartTime,
-        interactions: Array.from(root.memoizedInteractions).map(
-          (interaction: Interaction) => ({
-            ...interaction,
-            timestamp: interaction.timestamp - profilingStartTime,
-          }),
-        ),
         maxActualDuration: 0,
         priorityLevel:
           priorityLevel == null ? null : formatPriorityLevel(priorityLevel),
-        effectDuration,
-        passiveEffectDuration,
+
+        updaters: getUpdatersList(root),
+
+        // Initialize to null; if new enough React version is running,
+        // these values will be read during separate handlePostCommitFiberRoot() call.
+        effectDuration: null,
+        passiveEffectDuration: null,
       };
     }
 
@@ -2652,7 +2650,16 @@ export function attach(
     }
   }
 
-  function getOwnersList(id: number): Array<Owner> | null {
+  function fiberToSerializedElement(fiber: Fiber): SerializedElement {
+    return {
+      displayName: getDisplayNameForFiber(fiber) || 'Anonymous',
+      id: getFiberID(getPrimaryFiber(fiber)),
+      key: fiber.key,
+      type: getElementTypeForFiber(fiber),
+    };
+  }
+
+  function getOwnersList(id: number): Array<SerializedElement> | null {
     const fiber = findCurrentFiberUsingSlowPathById(id);
     if (fiber == null) {
       return null;
@@ -2660,22 +2667,12 @@ export function attach(
 
     const {_debugOwner} = fiber;
 
-    const owners = [
-      {
-        displayName: getDisplayNameForFiber(fiber) || 'Anonymous',
-        id,
-        type: getElementTypeForFiber(fiber),
-      },
-    ];
+    const owners: Array<SerializedElement> = [fiberToSerializedElement(fiber)];
 
     if (_debugOwner) {
       let owner = _debugOwner;
       while (owner !== null) {
-        owners.unshift({
-          displayName: getDisplayNameForFiber(owner) || 'Anonymous',
-          id: getFiberID(getPrimaryFiber(owner)),
-          type: getElementTypeForFiber(owner),
-        });
+        owners.unshift(fiberToSerializedElement(owner));
         owner = owner._debugOwner || null;
       }
     }
@@ -2806,11 +2803,7 @@ export function attach(
       owners = [];
       let owner = _debugOwner;
       while (owner !== null) {
-        owners.push({
-          displayName: getDisplayNameForFiber(owner) || 'Anonymous',
-          id: getFiberID(getPrimaryFiber(owner)),
-          type: getElementTypeForFiber(owner),
-        });
+        owners.push(fiberToSerializedElement(owner));
         owner = owner._debugOwner || null;
       }
     }
@@ -3391,10 +3384,10 @@ export function attach(
     commitTime: number,
     durations: Array<number>,
     effectDuration: number | null,
-    interactions: Array<Interaction>,
     maxActualDuration: number,
     passiveEffectDuration: number | null,
     priorityLevel: string | null,
+    updaters: Array<SerializedElement> | null,
   |};
 
   type CommitProfilingMetadataMap = Map<number, Array<CommitProfilingData>>;
@@ -3423,8 +3416,6 @@ export function attach(
       (commitProfilingMetadata, rootID) => {
         const commitData: Array<CommitDataBackend> = [];
         const initialTreeBaseDurations: Array<[number, number]> = [];
-        const allInteractions: Map<number, Interaction> = new Map();
-        const interactionCommits: Map<number, Array<number>> = new Map();
 
         const displayName =
           (displayNamesByRootID !== null && displayNamesByRootID.get(rootID)) ||
@@ -3448,29 +3439,12 @@ export function attach(
             changeDescriptions,
             durations,
             effectDuration,
-            interactions,
             maxActualDuration,
             passiveEffectDuration,
             priorityLevel,
             commitTime,
+            updaters,
           } = commitProfilingData;
-
-          const interactionIDs: Array<number> = [];
-
-          interactions.forEach(interaction => {
-            if (!allInteractions.has(interaction.id)) {
-              allInteractions.set(interaction.id, interaction);
-            }
-
-            interactionIDs.push(interaction.id);
-
-            const commitIndices = interactionCommits.get(interaction.id);
-            if (commitIndices != null) {
-              commitIndices.push(commitIndex);
-            } else {
-              interactionCommits.set(interaction.id, [commitIndex]);
-            }
-          });
 
           const fiberActualDurations: Array<[number, number]> = [];
           const fiberSelfDurations: Array<[number, number]> = [];
@@ -3489,10 +3463,10 @@ export function attach(
             effectDuration,
             fiberActualDurations,
             fiberSelfDurations,
-            interactionIDs,
             passiveEffectDuration,
             priorityLevel,
             timestamp: commitTime,
+            updaters,
           });
         });
 
@@ -3500,8 +3474,6 @@ export function attach(
           commitData,
           displayName,
           initialTreeBaseDurations,
-          interactionCommits: Array.from(interactionCommits.entries()),
-          interactions: Array.from(allInteractions.entries()),
           rootID,
         });
       },
@@ -3855,6 +3827,7 @@ export function attach(
     getProfilingData,
     handleCommitFiberRoot,
     handleCommitFiberUnmount,
+    handlePostCommitFiberRoot,
     inspectElement,
     logElementToConsole,
     prepareViewAttributeSource,

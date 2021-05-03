@@ -51,8 +51,8 @@ export const enableProfilerNestedUpdatePhase = false;
 // This callback accepts the component type (class instance or function) the update is scheduled for.
 export const enableProfilerNestedUpdateScheduledHook = false;
 
-// Trace which interactions trigger each commit.
-export const enableSchedulerTracing = __PROFILE__;
+// Track which Fiber(s) schedule render work.
+export const enableUpdaterTracking = __PROFILE__;
 
 // SSR experiments
 export const enableSuspenseServerRenderer = __EXPERIMENTAL__;
@@ -125,6 +125,11 @@ export const skipUnmountedBoundaries = false;
 // aggressiveness.
 export const deletedTreeCleanUpLevel = 1;
 
+// Destroy layout effects for components that are hidden because something suspended in an update
+// and recreate them when they are shown again (after the suspended boundary has resolved).
+// Note that this should be an uncommon use case and can be avoided by using the transition API.
+export const enableSuspenseLayoutEffectSemantics = false;
+
 // --------------------------
 // Future APIs to be deprecated
 // --------------------------
@@ -162,3 +167,7 @@ export const enableRecursiveCommitTraversal = false;
 export const disableSchedulerTimeoutInWorkLoop = false;
 
 export const enableLazyContextPropagation = false;
+
+export const enableSyncDefaultUpdates = true;
+
+export const allowConcurrentByDefault = false;

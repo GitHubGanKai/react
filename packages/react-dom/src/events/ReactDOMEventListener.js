@@ -25,21 +25,13 @@ import {
   getSuspenseInstanceFromFiber,
 } from 'react-reconciler/src/ReactFiberTreeReflection';
 import {HostRoot, SuspenseComponent} from 'react-reconciler/src/ReactWorkTags';
-import {
-  type EventSystemFlags,
-  IS_CAPTURE_PHASE,
-  IS_LEGACY_FB_SUPPORT_MODE,
-} from './EventSystemFlags';
+import {type EventSystemFlags, IS_CAPTURE_PHASE} from './EventSystemFlags';
 
 import getEventTarget from './getEventTarget';
 import {getClosestInstanceFromNode} from '../client/ReactDOMComponentTree';
 
-import {enableLegacyFBSupport} from 'shared/ReactFeatureFlags';
 import {dispatchEventForPluginEventSystem} from './DOMPluginEventSystem';
-import {
-  flushDiscreteUpdatesIfNeeded,
-  discreteUpdates,
-} from './ReactDOMUpdateBatching';
+import {discreteUpdates} from './ReactDOMUpdateBatching';
 
 import {
   getCurrentPriorityLevel as getCurrentSchedulerPriorityLevel,
@@ -57,9 +49,6 @@ import {
   getCurrentUpdatePriority,
   setCurrentUpdatePriority,
 } from 'react-reconciler/src/ReactEventPriorities';
-import ReactSharedInternals from 'shared/ReactSharedInternals';
-
-const {ReactCurrentBatchConfig} = ReactSharedInternals;
 
 // TODO: can we stop exporting these?
 export let _enabled = true;
@@ -120,14 +109,6 @@ function dispatchDiscreteEvent(
   container,
   nativeEvent,
 ) {
-  if (
-    !enableLegacyFBSupport ||
-    // If we are in Legacy FB support mode, it means we've already
-    // flushed for this event and we don't need to do it again.
-    (eventSystemFlags & IS_LEGACY_FB_SUPPORT_MODE) === 0
-  ) {
-    flushDiscreteUpdatesIfNeeded(nativeEvent.timeStamp);
-  }
   discreteUpdates(
     dispatchEvent,
     domEventName,
@@ -144,14 +125,11 @@ function dispatchContinuousEvent(
   nativeEvent,
 ) {
   const previousPriority = getCurrentUpdatePriority();
-  const prevTransition = ReactCurrentBatchConfig.transition;
-  ReactCurrentBatchConfig.transition = 0;
   try {
     setCurrentUpdatePriority(ContinuousEventPriority);
     dispatchEvent(domEventName, eventSystemFlags, container, nativeEvent);
   } finally {
     setCurrentUpdatePriority(previousPriority);
-    ReactCurrentBatchConfig.transition = prevTransition;
   }
 }
 

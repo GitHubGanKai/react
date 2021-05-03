@@ -18,12 +18,14 @@ export const disableInputAttributeSyncing = __VARIANT__;
 export const enableFilterEmptyStringAttributesDOM = __VARIANT__;
 export const enableLegacyFBSupport = __VARIANT__;
 export const skipUnmountedBoundaries = __VARIANT__;
+export const enableSuspenseLayoutEffectSemantics = __VARIANT__;
 
 // Enable this flag to help with concurrent mode debugging.
 // It logs information to the console about React scheduling, rendering, and commit phases.
 //
 // NOTE: This feature will only work in DEV mode; all callsights are wrapped with __DEV__.
 export const enableDebugTracing = __EXPERIMENTAL__;
+export const enableUpdaterTracking = false;
 
 export const enableSchedulingProfiler = __VARIANT__;
 
@@ -57,3 +59,5 @@ export const deletedTreeCleanUpLevel = __VARIANT__ ? 3 : 1;
 export const enableProfilerNestedUpdateScheduledHook = __VARIANT__;
 export const disableSchedulerTimeoutInWorkLoop = __VARIANT__;
 export const enableLazyContextPropagation = __VARIANT__;
+export const enableSyncDefaultUpdates = __VARIANT__;
+export const allowConcurrentByDefault = true;

@@ -88,6 +88,7 @@ describe('ReactSchedulerIntegration', () => {
     ]);
   });
 
+  // @gate experimental || !enableSyncDefaultUpdates
   it('requests a paint after committing', () => {
     const scheduleCallback = Scheduler.unstable_scheduleCallback;
 
@@ -100,7 +101,13 @@ describe('ReactSchedulerIntegration', () => {
     scheduleCallback(NormalPriority, () => Scheduler.unstable_yieldValue('C'));
 
     // Schedule a React render. React will request a paint after committing it.
-    root.render('Update');
+    if (gate(flags => flags.enableSyncDefaultUpdates)) {
+      React.unstable_startTransition(() => {
+        root.render('Update');
+      });
+    } else {
+      root.render('Update');
+    }
 
     // Advance time just to be sure the next tasks have lower priority
     Scheduler.unstable_advanceTime(2000);
@@ -293,10 +300,9 @@ describe(
           ReactNoop.render(<App />);
         });
 
-        ReactNoop.flushSync();
-
         // Because the render expired, React should finish the tree without
         // consulting `shouldYield` again
+        Scheduler.unstable_flushNumberOfYields(1);
         expect(Scheduler).toHaveYielded(['B', 'C']);
       });
     });
