@@ -32,6 +32,10 @@ module.exports = {
   node: {
     // Don't define a polyfill on window.setImmediate
     setImmediate: false,
+
+    // source-maps package has a dependency on 'fs'
+    // but this build won't trigger that code path
+    fs: 'empty',
   },
   resolve: {
     alias: {
@@ -51,6 +55,7 @@ module.exports = {
       __DEV__: true,
       __PROFILE__: false,
       __EXPERIMENTAL__: true,
+      'process.env.DEVTOOLS_PACKAGE': `"react-devtools-extensions"`,
       'process.env.DEVTOOLS_VERSION': `"${DEVTOOLS_VERSION}"`,
       'process.env.GITHUB_URL': `"${GITHUB_URL}"`,
     }),

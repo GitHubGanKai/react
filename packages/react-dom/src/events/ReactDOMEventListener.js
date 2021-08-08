@@ -31,7 +31,6 @@ import getEventTarget from './getEventTarget';
 import {getClosestInstanceFromNode} from '../client/ReactDOMComponentTree';
 
 import {dispatchEventForPluginEventSystem} from './DOMPluginEventSystem';
-import {discreteUpdates} from './ReactDOMUpdateBatching';
 
 import {
   getCurrentPriorityLevel as getCurrentSchedulerPriorityLevel,
@@ -49,6 +48,9 @@ import {
   getCurrentUpdatePriority,
   setCurrentUpdatePriority,
 } from 'react-reconciler/src/ReactEventPriorities';
+import ReactSharedInternals from 'shared/ReactSharedInternals';
+
+const {ReactCurrentBatchConfig} = ReactSharedInternals;
 
 // TODO: can we stop exporting these?
 export let _enabled = true;
@@ -109,13 +111,16 @@ function dispatchDiscreteEvent(
   container,
   nativeEvent,
 ) {
-  discreteUpdates(
-    dispatchEvent,
-    domEventName,
-    eventSystemFlags,
-    container,
-    nativeEvent,
-  );
+  const previousPriority = getCurrentUpdatePriority();
+  const prevTransition = ReactCurrentBatchConfig.transition;
+  ReactCurrentBatchConfig.transition = 0;
+  try {
+    setCurrentUpdatePriority(DiscreteEventPriority);
+    dispatchEvent(domEventName, eventSystemFlags, container, nativeEvent);
+  } finally {
+    setCurrentUpdatePriority(previousPriority);
+    ReactCurrentBatchConfig.transition = prevTransition;
+  }
 }
 
 function dispatchContinuousEvent(
@@ -125,11 +130,14 @@ function dispatchContinuousEvent(
   nativeEvent,
 ) {
   const previousPriority = getCurrentUpdatePriority();
+  const prevTransition = ReactCurrentBatchConfig.transition;
+  ReactCurrentBatchConfig.transition = 0;
   try {
     setCurrentUpdatePriority(ContinuousEventPriority);
     dispatchEvent(domEventName, eventSystemFlags, container, nativeEvent);
   } finally {
     setCurrentUpdatePriority(previousPriority);
+    ReactCurrentBatchConfig.transition = prevTransition;
   }
 }
 

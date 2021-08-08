@@ -18,6 +18,15 @@ const __DEV__ = NODE_ENV === 'development';
 
 const DEVTOOLS_VERSION = getVersionString();
 
+const babelOptions = {
+  configFile: resolve(
+    __dirname,
+    '..',
+    'react-devtools-shared',
+    'babel.config.js',
+  ),
+};
+
 module.exports = {
   mode: __DEV__ ? 'development' : 'production',
   devtool: __DEV__ ? 'cheap-module-eval-source-map' : 'source-map',
@@ -54,6 +63,7 @@ module.exports = {
       __EXTENSION__: false,
       __PROFILE__: false,
       __TEST__: NODE_ENV === 'test',
+      'process.env.DEVTOOLS_PACKAGE': `"react-devtools-core"`,
       'process.env.DEVTOOLS_VERSION': `"${DEVTOOLS_VERSION}"`,
       'process.env.GITHUB_URL': `"${GITHUB_URL}"`,
       'process.env.NODE_ENV': `"${NODE_ENV}"`,
@@ -62,16 +72,24 @@ module.exports = {
   module: {
     rules: [
       {
+        test: /\.worker\.js$/,
+        use: [
+          {
+            loader: 'workerize-loader',
+            options: {
+              inline: true,
+            },
+          },
+          {
+            loader: 'babel-loader',
+            options: babelOptions,
+          },
+        ],
+      },
+      {
         test: /\.js$/,
         loader: 'babel-loader',
-        options: {
-          configFile: resolve(
-            __dirname,
-            '..',
-            'react-devtools-shared',
-            'babel.config.js',
-          ),
-        },
+        options: babelOptions,
       },
       {
         test: /\.css$/,

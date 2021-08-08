@@ -14,11 +14,10 @@ import type {
   MouseUpInteraction,
   WheelPlainInteraction,
   WheelWithShiftInteraction,
-  WheelWithControlInteraction,
-  WheelWithMetaInteraction,
 } from './useCanvasInteraction';
 import type {Rect} from './geometry';
 import type {ScrollState} from './utils/scrollState';
+import type {ViewRefs} from './Surface';
 
 import {Surface} from './Surface';
 import {View} from './View';
@@ -155,13 +154,31 @@ export class HorizontalPanAndZoomView extends View {
     this._setScrollState(newState);
   }
 
-  _handleMouseDown(interaction: MouseDownInteraction) {
+  _handleMouseDown(interaction: MouseDownInteraction, viewRefs: ViewRefs) {
     if (rectContainsPoint(interaction.payload.location, this.frame)) {
       this._isPanning = true;
+
+      viewRefs.activeView = this;
+
+      this.currentCursor = 'grabbing';
     }
   }
 
-  _handleMouseMove(interaction: MouseMoveInteraction) {
+  _handleMouseMove(interaction: MouseMoveInteraction, viewRefs: ViewRefs) {
+    const isHovered = rectContainsPoint(
+      interaction.payload.location,
+      this.frame,
+    );
+    if (isHovered) {
+      viewRefs.hoveredView = this;
+    }
+
+    if (viewRefs.activeView === this) {
+      this.currentCursor = 'grabbing';
+    } else if (isHovered) {
+      this.currentCursor = 'grab';
+    }
+
     if (!this._isPanning) {
       return;
     }
@@ -173,13 +190,17 @@ export class HorizontalPanAndZoomView extends View {
     this._setStateAndInformCallbacksIfChanged(newState);
   }
 
-  _handleMouseUp(interaction: MouseUpInteraction) {
+  _handleMouseUp(interaction: MouseUpInteraction, viewRefs: ViewRefs) {
     if (this._isPanning) {
       this._isPanning = false;
     }
+
+    if (viewRefs.activeView === this) {
+      viewRefs.activeView = null;
+    }
   }
 
-  _handleWheelPlain(interaction: WheelPlainInteraction) {
+  _handleWheel(interaction: WheelPlainInteraction | WheelWithShiftInteraction) {
     const {
       location,
       delta: {deltaX, deltaY},
@@ -191,71 +212,57 @@ export class HorizontalPanAndZoomView extends View {
 
     const absDeltaX = Math.abs(deltaX);
     const absDeltaY = Math.abs(deltaY);
+
+    // Vertical scrolling zooms in and out (unless the SHIFT modifier is used).
+    // Horizontal scrolling pans.
     if (absDeltaY > absDeltaX) {
-      return; // Scrolling vertically
-    }
-    if (absDeltaX < MOVE_WHEEL_DELTA_THRESHOLD) {
-      return;
-    }
+      if (absDeltaY < MOVE_WHEEL_DELTA_THRESHOLD) {
+        return;
+      }
 
-    const newState = translateState({
-      state: this._scrollState,
-      delta: -deltaX,
-      containerLength: this.frame.size.width,
-    });
-    this._setStateAndInformCallbacksIfChanged(newState);
+      if (interaction.type === 'wheel-shift') {
+        // Shift modifier is for scrolling, not zooming.
+        return;
+      }
+
+      const newState = zoomState({
+        state: this._scrollState,
+        multiplier: 1 + 0.005 * -deltaY,
+        fixedPoint: location.x - this._scrollState.offset,
+
+        minContentLength: this._intrinsicContentWidth * MIN_ZOOM_LEVEL,
+        maxContentLength: this._intrinsicContentWidth * MAX_ZOOM_LEVEL,
+        containerLength: this.frame.size.width,
+      });
+      this._setStateAndInformCallbacksIfChanged(newState);
+    } else {
+      if (absDeltaX < MOVE_WHEEL_DELTA_THRESHOLD) {
+        return;
+      }
+
+      const newState = translateState({
+        state: this._scrollState,
+        delta: -deltaX,
+        containerLength: this.frame.size.width,
+      });
+      this._setStateAndInformCallbacksIfChanged(newState);
+    }
   }
 
-  _handleWheelZoom(
-    interaction:
-      | WheelWithShiftInteraction
-      | WheelWithControlInteraction
-      | WheelWithMetaInteraction,
-  ) {
-    const {
-      location,
-      delta: {deltaY},
-    } = interaction.payload;
-
-    if (!rectContainsPoint(location, this.frame)) {
-      return; // Not scrolling on view
-    }
-
-    const absDeltaY = Math.abs(deltaY);
-    if (absDeltaY < MOVE_WHEEL_DELTA_THRESHOLD) {
-      return;
-    }
-
-    const newState = zoomState({
-      state: this._scrollState,
-      multiplier: 1 + 0.005 * -deltaY,
-      fixedPoint: location.x - this._scrollState.offset,
-
-      minContentLength: this._intrinsicContentWidth * MIN_ZOOM_LEVEL,
-      maxContentLength: this._intrinsicContentWidth * MAX_ZOOM_LEVEL,
-      containerLength: this.frame.size.width,
-    });
-    this._setStateAndInformCallbacksIfChanged(newState);
-  }
-
-  handleInteraction(interaction: Interaction) {
+  handleInteraction(interaction: Interaction, viewRefs: ViewRefs) {
     switch (interaction.type) {
       case 'mousedown':
-        this._handleMouseDown(interaction);
+        this._handleMouseDown(interaction, viewRefs);
         break;
       case 'mousemove':
-        this._handleMouseMove(interaction);
+        this._handleMouseMove(interaction, viewRefs);
         break;
       case 'mouseup':
-        this._handleMouseUp(interaction);
+        this._handleMouseUp(interaction, viewRefs);
         break;
       case 'wheel-plain':
-        this._handleWheelPlain(interaction);
-        break;
       case 'wheel-shift':
-      case 'wheel-control':
-      case 'wheel-meta':
-        this._handleWheelZoom(interaction);
+        this._handleWheel(interaction);
         break;
     }
   }

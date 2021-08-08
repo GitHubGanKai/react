@@ -51,19 +51,13 @@ import {
   requestUpdateLane,
   scheduleUpdateOnFiber,
   flushRoot,
-  batchedEventUpdates,
   batchedUpdates,
-  unbatchedUpdates,
   flushSync,
   flushControlled,
   deferredUpdates,
   discreteUpdates,
-  flushDiscreteUpdates,
+  flushSyncWithoutWarningIfAlreadyRendering,
   flushPassiveEffects,
-  warnIfNotScopedWithMatchingAct,
-  warnIfUnmockedScheduler,
-  IsThisRendererActing,
-  act,
 } from './ReactFiberWorkLoop.new';
 import {
   createUpdate,
@@ -248,7 +242,7 @@ export function createContainer(
   tag: RootTag,
   hydrate: boolean,
   hydrationCallbacks: null | SuspenseHydrationCallbacks,
-  strictModeLevelOverride: null | number,
+  isStrictMode: boolean,
   concurrentUpdatesByDefaultOverride: null | boolean,
 ): OpaqueRoot {
   return createFiberRoot(
@@ -256,7 +250,7 @@ export function createContainer(
     tag,
     hydrate,
     hydrationCallbacks,
-    strictModeLevelOverride,
+    isStrictMode,
     concurrentUpdatesByDefaultOverride,
   );
 }
@@ -272,13 +266,6 @@ export function updateContainer(
   }
   const current = container.current;
   const eventTime = requestEventTime();
-  if (__DEV__) {
-    // $FlowExpectedError - jest isn't a global, and isn't recognized outside of tests
-    if ('undefined' !== typeof jest) {
-      warnIfUnmockedScheduler(current);
-      warnIfNotScopedWithMatchingAct(current);
-    }
-  }
   const lane = requestUpdateLane(current);
 
   if (enableSchedulingProfiler) {
@@ -338,17 +325,13 @@ export function updateContainer(
 }
 
 export {
-  batchedEventUpdates,
   batchedUpdates,
-  unbatchedUpdates,
   deferredUpdates,
   discreteUpdates,
-  flushDiscreteUpdates,
   flushControlled,
   flushSync,
+  flushSyncWithoutWarningIfAlreadyRendering,
   flushPassiveEffects,
-  IsThisRendererActing,
-  act,
 };
 
 export function getPublicRootInstance(
@@ -463,6 +446,12 @@ export function findHostInstanceWithNoPortals(
   return hostFiber.stateNode;
 }
 
+let shouldErrorImpl = fiber => null;
+
+export function shouldError(fiber: Fiber): ?boolean {
+  return shouldErrorImpl(fiber);
+}
+
 let shouldSuspendImpl = fiber => false;
 
 export function shouldSuspend(fiber: Fiber): boolean {
@@ -476,6 +465,7 @@ let overrideProps = null;
 let overridePropsDeletePath = null;
 let overridePropsRenamePath = null;
 let scheduleUpdate = null;
+let setErrorHandler = null;
 let setSuspenseHandler = null;
 
 if (__DEV__) {
@@ -690,6 +680,10 @@ if (__DEV__) {
     scheduleUpdateOnFiber(fiber, SyncLane, NoTimestamp);
   };
 
+  setErrorHandler = (newShouldErrorImpl: Fiber => ?boolean) => {
+    shouldErrorImpl = newShouldErrorImpl;
+  };
+
   setSuspenseHandler = (newShouldSuspendImpl: Fiber => boolean) => {
     shouldSuspendImpl = newShouldSuspendImpl;
   };
@@ -728,6 +722,7 @@ export function injectIntoDevTools(devToolsConfig: DevToolsConfig): boolean {
     overrideProps,
     overridePropsDeletePath,
     overridePropsRenamePath,
+    setErrorHandler,
     setSuspenseHandler,
     scheduleUpdate,
     currentDispatcherRef: ReactCurrentDispatcher,

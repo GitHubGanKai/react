@@ -21,57 +21,55 @@ export type Milliseconds = number;
 
 export type ReactLane = number;
 
+export type NativeEvent = {|
+  +depth: number,
+  +duration: Milliseconds,
+  +timestamp: Milliseconds,
+  +type: string,
+  warning: string | null,
+|};
+
 type BaseReactEvent = {|
   +componentName?: string,
-  +componentStack?: string,
   +timestamp: Milliseconds,
+  warning: string | null,
 |};
 
 type BaseReactScheduleEvent = {|
   ...BaseReactEvent,
   +lanes: ReactLane[],
-  +laneLabels: string[],
 |};
 export type ReactScheduleRenderEvent = {|
   ...BaseReactScheduleEvent,
-  type: 'schedule-render',
+  +type: 'schedule-render',
 |};
 export type ReactScheduleStateUpdateEvent = {|
   ...BaseReactScheduleEvent,
-  type: 'schedule-state-update',
-  isCascading: boolean,
+  +type: 'schedule-state-update',
 |};
 export type ReactScheduleForceUpdateEvent = {|
   ...BaseReactScheduleEvent,
-  type: 'schedule-force-update',
-  isCascading: boolean,
+  +type: 'schedule-force-update',
 |};
 
-type BaseReactSuspenseEvent = {|
+export type Phase = 'mount' | 'update';
+
+export type SuspenseEvent = {|
   ...BaseReactEvent,
-  id: string,
-|};
-export type ReactSuspenseSuspendEvent = {|
-  ...BaseReactSuspenseEvent,
-  type: 'suspense-suspend',
-|};
-export type ReactSuspenseResolvedEvent = {|
-  ...BaseReactSuspenseEvent,
-  type: 'suspense-resolved',
-|};
-export type ReactSuspenseRejectedEvent = {|
-  ...BaseReactSuspenseEvent,
-  type: 'suspense-rejected',
+  depth: number,
+  duration: number | null,
+  +id: string,
+  +phase: Phase | null,
+  resolution: 'rejected' | 'resolved' | 'unresolved',
+  resuspendTimestamps: Array<number> | null,
+  +type: 'suspense',
 |};
 
-export type ReactEvent =
+export type SchedulingEvent =
   | ReactScheduleRenderEvent
   | ReactScheduleStateUpdateEvent
-  | ReactScheduleForceUpdateEvent
-  | ReactSuspenseSuspendEvent
-  | ReactSuspenseResolvedEvent
-  | ReactSuspenseRejectedEvent;
-export type ReactEventType = $PropertyType<ReactEvent, 'type'>;
+  | ReactScheduleForceUpdateEvent;
+export type SchedulingEventType = $PropertyType<SchedulingEvent, 'type'>;
 
 export type ReactMeasureType =
   | 'commit'
@@ -87,11 +85,17 @@ export type BatchUID = number;
 export type ReactMeasure = {|
   +type: ReactMeasureType,
   +lanes: ReactLane[],
-  +laneLabels: string[],
   +timestamp: Milliseconds,
   +duration: Milliseconds,
   +batchUID: BatchUID,
   +depth: number,
+|};
+
+export type ReactComponentMeasure = {|
+  +componentName: string,
+  duration: Milliseconds,
+  +timestamp: Milliseconds,
+  warning: string | null,
 |};
 
 /**
@@ -120,18 +124,26 @@ export type FlamechartStackLayer = FlamechartStackFrame[];
 export type Flamechart = FlamechartStackLayer[];
 
 export type ReactProfilerData = {|
-  startTime: number,
+  componentMeasures: ReactComponentMeasure[],
   duration: number,
-  events: ReactEvent[],
-  measures: ReactMeasure[],
   flamechart: Flamechart,
+  laneToLabelMap: Map<ReactLane, string>,
+  measures: ReactMeasure[],
+  nativeEvents: NativeEvent[],
   otherUserTimingMarks: UserTimingMark[],
+  reactVersion: string | null,
+  schedulingEvents: SchedulingEvent[],
+  startTime: number,
+  suspenseEvents: SuspenseEvent[],
 |};
 
 export type ReactHoverContextInfo = {|
-  event: ReactEvent | null,
-  measure: ReactMeasure | null,
+  componentMeasure: ReactComponentMeasure | null,
   data: $ReadOnly<ReactProfilerData> | null,
   flamechartStackFrame: FlamechartStackFrame | null,
+  measure: ReactMeasure | null,
+  nativeEvent: NativeEvent | null,
+  schedulingEvent: SchedulingEvent | null,
+  suspenseEvent: SuspenseEvent | null,
   userTimingMark: UserTimingMark | null,
 |};

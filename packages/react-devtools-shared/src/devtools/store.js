@@ -62,6 +62,7 @@ type Config = {|
   isProfiling?: boolean,
   supportsNativeInspection?: boolean,
   supportsReloadAndProfile?: boolean,
+  supportsSchedulingProfiler?: boolean,
   supportsProfiling?: boolean,
   supportsTraceUpdates?: boolean,
 |};
@@ -78,6 +79,7 @@ export type Capabilities = {|
 export default class Store extends EventEmitter<{|
   collapseNodesByDefault: [],
   componentFilters: [],
+  error: [Error],
   mutated: [[Array<number>, Map<number, number>]],
   recordChangeDescriptions: [],
   roots: [],
@@ -158,6 +160,7 @@ export default class Store extends EventEmitter<{|
   _supportsNativeInspection: boolean = true;
   _supportsProfiling: boolean = false;
   _supportsReloadAndProfile: boolean = false;
+  _supportsSchedulingProfiler: boolean = false;
   _supportsTraceUpdates: boolean = false;
 
   _unsupportedBridgeProtocol: BridgeProtocol | null = null;
@@ -192,6 +195,7 @@ export default class Store extends EventEmitter<{|
         supportsNativeInspection,
         supportsProfiling,
         supportsReloadAndProfile,
+        supportsSchedulingProfiler,
         supportsTraceUpdates,
       } = config;
       this._supportsNativeInspection = supportsNativeInspection !== false;
@@ -200,6 +204,9 @@ export default class Store extends EventEmitter<{|
       }
       if (supportsReloadAndProfile) {
         this._supportsReloadAndProfile = true;
+      }
+      if (supportsSchedulingProfiler) {
+        this._supportsSchedulingProfiler = true;
       }
       if (supportsTraceUpdates) {
         this._supportsTraceUpdates = true;
@@ -270,12 +277,14 @@ export default class Store extends EventEmitter<{|
   assertMapSizeMatchesRootCount(map: Map<any, any>, mapName: string) {
     const expectedSize = this.roots.length;
     if (map.size !== expectedSize) {
-      throw new Error(
-        `Expected ${mapName} to contain ${expectedSize} items, but it contains ${
-          map.size
-        } items\n\n${inspect(map, {
-          depth: 20,
-        })}`,
+      this._throwAndEmitError(
+        Error(
+          `Expected ${mapName} to contain ${expectedSize} items, but it contains ${
+            map.size
+          } items\n\n${inspect(map, {
+            depth: 20,
+          })}`,
+        ),
       );
     }
   }
@@ -301,7 +310,9 @@ export default class Store extends EventEmitter<{|
     if (this._profilerStore.isProfiling) {
       // Re-mounting a tree while profiling is in progress might break a lot of assumptions.
       // If necessary, we could support this- but it doesn't seem like a necessary use case.
-      throw Error('Cannot modify filter preferences while profiling');
+      this._throwAndEmitError(
+        Error('Cannot modify filter preferences while profiling'),
+      );
     }
 
     // Filter updates are expensive to apply (since they impact the entire tree).
@@ -330,8 +341,8 @@ export default class Store extends EventEmitter<{|
     // Update persisted filter preferences stored in localStorage.
     saveComponentFilters(value);
 
-    // Notify the renderer that filter prefernces have changed.
-    // This is an expensive opreation; it unmounts and remounts the entire tree,
+    // Notify the renderer that filter preferences have changed.
+    // This is an expensive operation; it unmounts and remounts the entire tree,
     // so only do it if the set of enabled component filters has changed.
     if (haveEnabledFiltersChanged) {
       this._bridge.send('updateComponentFilters', value);
@@ -407,6 +418,10 @@ export default class Store extends EventEmitter<{|
       this._isBackendStorageAPISupported &&
       this._isSynchronousXHRSupported
     );
+  }
+
+  get supportsSchedulingProfiler(): boolean {
+    return this._supportsSchedulingProfiler;
   }
 
   get supportsTraceUpdates(): boolean {
@@ -607,7 +622,7 @@ export default class Store extends EventEmitter<{|
             }
 
             if (depth === 0) {
-              throw Error('Invalid owners list');
+              this._throwAndEmitError(Error('Invalid owners list'));
             }
 
             list.push({...innerElement, depth});
@@ -667,7 +682,7 @@ export default class Store extends EventEmitter<{|
     if (element !== null) {
       if (isCollapsed) {
         if (element.type === ElementTypeRoot) {
-          throw Error('Root nodes cannot be collapsed');
+          this._throwAndEmitError(Error('Root nodes cannot be collapsed'));
         }
 
         if (!element.isCollapsed) {
@@ -825,8 +840,10 @@ export default class Store extends EventEmitter<{|
           i += 3;
 
           if (this._idToElement.has(id)) {
-            throw Error(
-              `Cannot add node "${id}" because a node with that id is already in the Store.`,
+            this._throwAndEmitError(
+              Error(
+                `Cannot add node "${id}" because a node with that id is already in the Store.`,
+              ),
             );
           }
 
@@ -888,8 +905,10 @@ export default class Store extends EventEmitter<{|
             }
 
             if (!this._idToElement.has(parentID)) {
-              throw Error(
-                `Cannot add child "${id}" to parent "${parentID}" because parent node was not found in the Store.`,
+              this._throwAndEmitError(
+                Error(
+                  `Cannot add child "${id}" to parent "${parentID}" because parent node was not found in the Store.`,
+                ),
               );
             }
 
@@ -940,8 +959,10 @@ export default class Store extends EventEmitter<{|
             const id = ((operations[i]: any): number);
 
             if (!this._idToElement.has(id)) {
-              throw Error(
-                `Cannot remove node "${id}" because no matching node was found in the Store.`,
+              this._throwAndEmitError(
+                Error(
+                  `Cannot remove node "${id}" because no matching node was found in the Store.`,
+                ),
               );
             }
 
@@ -950,7 +971,9 @@ export default class Store extends EventEmitter<{|
             const element = ((this._idToElement.get(id): any): Element);
             const {children, ownerID, parentID, weight} = element;
             if (children.length > 0) {
-              throw new Error(`Node "${id}" was removed before its children.`);
+              this._throwAndEmitError(
+                Error(`Node "${id}" was removed before its children.`),
+              );
             }
 
             this._idToElement.delete(id);
@@ -972,8 +995,10 @@ export default class Store extends EventEmitter<{|
               }
               parentElement = ((this._idToElement.get(parentID): any): Element);
               if (parentElement === undefined) {
-                throw Error(
-                  `Cannot remove node "${id}" from parent "${parentID}" because no matching node was found in the Store.`,
+                this._throwAndEmitError(
+                  Error(
+                    `Cannot remove node "${id}" from parent "${parentID}" because no matching node was found in the Store.`,
+                  ),
                 );
               }
               const index = parentElement.children.indexOf(id);
@@ -1033,16 +1058,20 @@ export default class Store extends EventEmitter<{|
           i += 3;
 
           if (!this._idToElement.has(id)) {
-            throw Error(
-              `Cannot reorder children for node "${id}" because no matching node was found in the Store.`,
+            this._throwAndEmitError(
+              Error(
+                `Cannot reorder children for node "${id}" because no matching node was found in the Store.`,
+              ),
             );
           }
 
           const element = ((this._idToElement.get(id): any): Element);
           const children = element.children;
           if (children.length !== numChildren) {
-            throw Error(
-              `Children cannot be added or removed during a reorder operation.`,
+            this._throwAndEmitError(
+              Error(
+                `Children cannot be added or removed during a reorder operation.`,
+              ),
             );
           }
 
@@ -1087,7 +1116,9 @@ export default class Store extends EventEmitter<{|
           haveErrorsOrWarningsChanged = true;
           break;
         default:
-          throw Error(`Unsupported Bridge operation "${operation}"`);
+          this._throwAndEmitError(
+            Error(`Unsupported Bridge operation "${operation}"`),
+          );
       }
     }
 
@@ -1251,4 +1282,17 @@ export default class Store extends EventEmitter<{|
 
     this.emit('unsupportedBridgeProtocolDetected');
   };
+
+  // The Store should never throw an Error without also emitting an event.
+  // Otherwise Store errors will be invisible to users,
+  // but the downstream errors they cause will be reported as bugs.
+  // For example, https://github.com/facebook/react/issues/21402
+  // Emitting an error event allows the ErrorBoundary to show the original error.
+  _throwAndEmitError(error: Error) {
+    this.emit('error', error);
+
+    // Throwing is still valuable for local development
+    // and for unit testing the Store itself.
+    throw error;
+  }
 }

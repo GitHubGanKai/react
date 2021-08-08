@@ -31,6 +31,11 @@ const config = {
     app: './src/app/index.js',
     devtools: './src/devtools.js',
   },
+  node: {
+    // source-maps package has a dependency on 'fs'
+    // but this build won't trigger that code path
+    fs: 'empty',
+  },
   resolve: {
     alias: {
       react: resolve(builtModulesDir, 'react'),
@@ -52,6 +57,7 @@ const config = {
       __PROFILE__: false,
       __TEST__: NODE_ENV === 'test',
       'process.env.GITHUB_URL': `"${GITHUB_URL}"`,
+      'process.env.DEVTOOLS_PACKAGE': `"react-devtools-shell"`,
       'process.env.DEVTOOLS_VERSION': `"${DEVTOOLS_VERSION}"`,
     }),
   ],

@@ -16,6 +16,7 @@ let React;
 let ReactDOM;
 let ReactDOMFizzServer;
 let Suspense;
+let SuspenseList;
 let PropTypes;
 let textCache;
 let document;
@@ -33,10 +34,11 @@ describe('ReactDOMFizzServer', () => {
     React = require('react');
     ReactDOM = require('react-dom');
     if (__EXPERIMENTAL__) {
-      ReactDOMFizzServer = require('react-dom/unstable-fizz');
+      ReactDOMFizzServer = require('react-dom/server');
     }
     Stream = require('stream');
     Suspense = React.Suspense;
+    SuspenseList = React.SuspenseList;
     PropTypes = require('prop-types');
 
     textCache = new Map();
@@ -311,7 +313,7 @@ describe('ReactDOMFizzServer', () => {
     expect(loggedErrors).toEqual([]);
 
     // Attempt to hydrate the content.
-    const root = ReactDOM.unstable_createRoot(container, {hydrate: true});
+    const root = ReactDOM.createRoot(container, {hydrate: true});
     root.render(<App isClient={true} />);
     Scheduler.unstable_flushAll();
 
@@ -403,7 +405,7 @@ describe('ReactDOMFizzServer', () => {
     expect(loggedErrors).toEqual([]);
 
     // Attempt to hydrate the content.
-    const root = ReactDOM.unstable_createRoot(container, {hydrate: true});
+    const root = ReactDOM.createRoot(container, {hydrate: true});
     root.render(<App isClient={true} />);
     Scheduler.unstable_flushAll();
 
@@ -476,9 +478,10 @@ describe('ReactDOMFizzServer', () => {
     });
 
     // We're still showing a fallback.
+    expect(getVisibleChildren(container)).toEqual(<div>Loading...</div>);
 
     // Attempt to hydrate the content.
-    const root = ReactDOM.unstable_createRoot(container, {hydrate: true});
+    const root = ReactDOM.createRoot(container, {hydrate: true});
     root.render(<App />);
     Scheduler.unstable_flushAll();
 
@@ -508,6 +511,176 @@ describe('ReactDOMFizzServer', () => {
   });
 
   // @gate experimental
+  it('handles an error on the client if the server ends up erroring', async () => {
+    const ref = React.createRef();
+
+    class ErrorBoundary extends React.Component {
+      state = {error: null};
+      static getDerivedStateFromError(error) {
+        return {error};
+      }
+      render() {
+        if (this.state.error) {
+          return <b ref={ref}>{this.state.error.message}</b>;
+        }
+        return this.props.children;
+      }
+    }
+
+    function App() {
+      return (
+        <ErrorBoundary>
+          <div>
+            <Suspense fallback="Loading...">
+              <span ref={ref}>
+                <AsyncText text="This Errors" />
+              </span>
+            </Suspense>
+          </div>
+        </ErrorBoundary>
+      );
+    }
+
+    const loggedErrors = [];
+
+    // We originally suspend the boundary and start streaming the loading state.
+    await act(async () => {
+      const {startWriting} = ReactDOMFizzServer.pipeToNodeWritable(
+        <App />,
+        writable,
+        {
+          onError(x) {
+            loggedErrors.push(x);
+          },
+        },
+      );
+      startWriting();
+    });
+
+    // We're still showing a fallback.
+    expect(getVisibleChildren(container)).toEqual(<div>Loading...</div>);
+
+    expect(loggedErrors).toEqual([]);
+
+    // Attempt to hydrate the content.
+    const root = ReactDOM.createRoot(container, {hydrate: true});
+    root.render(<App />);
+    Scheduler.unstable_flushAll();
+
+    // We're still loading because we're waiting for the server to stream more content.
+    expect(getVisibleChildren(container)).toEqual(<div>Loading...</div>);
+
+    const theError = new Error('Error Message');
+    await act(async () => {
+      rejectText('This Errors', theError);
+    });
+
+    expect(loggedErrors).toEqual([theError]);
+
+    // The server errored, but we still haven't hydrated. We don't know if the
+    // client will succeed yet, so we still show the loading state.
+    expect(getVisibleChildren(container)).toEqual(<div>Loading...</div>);
+    expect(ref.current).toBe(null);
+
+    // Flush the hydration.
+    Scheduler.unstable_flushAll();
+
+    // Hydrating should've generated an error and replaced the suspense boundary.
+    expect(getVisibleChildren(container)).toEqual(<b>Error Message</b>);
+
+    const b = container.getElementsByTagName('b')[0];
+    expect(ref.current).toBe(b);
+  });
+
+  // @gate experimental
+  it('shows inserted items before pending in a SuspenseList as fallbacks while hydrating', async () => {
+    const ref = React.createRef();
+
+    // These are hoisted to avoid them from rerendering.
+    const a = (
+      <Suspense fallback="Loading A">
+        <span ref={ref}>
+          <AsyncText text="A" />
+        </span>
+      </Suspense>
+    );
+    const b = (
+      <Suspense fallback="Loading B">
+        <span>
+          <Text text="B" />
+        </span>
+      </Suspense>
+    );
+
+    function App({showMore}) {
+      return (
+        <SuspenseList revealOrder="forwards">
+          {a}
+          {b}
+          {showMore ? (
+            <Suspense fallback="Loading C">
+              <span>C</span>
+            </Suspense>
+          ) : null}
+        </SuspenseList>
+      );
+    }
+
+    // We originally suspend the boundary and start streaming the loading state.
+    await act(async () => {
+      const {startWriting} = ReactDOMFizzServer.pipeToNodeWritable(
+        <App showMore={false} />,
+        writable,
+      );
+      startWriting();
+    });
+
+    const root = ReactDOM.createRoot(container, {hydrate: true});
+    root.render(<App showMore={false} />);
+    Scheduler.unstable_flushAll();
+
+    // We're not hydrated yet.
+    expect(ref.current).toBe(null);
+    expect(getVisibleChildren(container)).toEqual([
+      'Loading A',
+      // TODO: This is incorrect. It should be "Loading B" but Fizz SuspenseList
+      // isn't implemented fully yet.
+      <span>B</span>,
+    ]);
+
+    // Add more rows before we've hydrated the first two.
+    root.render(<App showMore={true} />);
+    Scheduler.unstable_flushAll();
+
+    // We're not hydrated yet.
+    expect(ref.current).toBe(null);
+
+    // We haven't resolved yet.
+    expect(getVisibleChildren(container)).toEqual([
+      'Loading A',
+      // TODO: This is incorrect. It should be "Loading B" but Fizz SuspenseList
+      // isn't implemented fully yet.
+      <span>B</span>,
+      'Loading C',
+    ]);
+
+    await act(async () => {
+      await resolveText('A');
+    });
+
+    Scheduler.unstable_flushAll();
+
+    expect(getVisibleChildren(container)).toEqual([
+      <span>A</span>,
+      <span>B</span>,
+      <span>C</span>,
+    ]);
+
+    const span = container.getElementsByTagName('span')[0];
+    expect(ref.current).toBe(span);
+  });
+
+  // @gate experimental
   it('client renders a boundary if it does not resolve before aborting', async () => {
     function App() {
       return (
@@ -530,7 +703,7 @@ describe('ReactDOMFizzServer', () => {
     // We're still showing a fallback.
 
     // Attempt to hydrate the content.
-    const root = ReactDOM.unstable_createRoot(container, {hydrate: true});
+    const root = ReactDOM.createRoot(container, {hydrate: true});
     root.render(<App />);
     Scheduler.unstable_flushAll();
 
@@ -885,6 +1058,118 @@ describe('ReactDOMFizzServer', () => {
     );
   });
 
+  function normalizeCodeLocInfo(str) {
+    return (
+      str &&
+      str.replace(/\n +(?:at|in) ([\S]+)[^\n]*/g, function(m, name) {
+        return '\n    in ' + name + ' (at **)';
+      })
+    );
+  }
+
+  // @gate experimental
+  it('should include a component stack across suspended boundaries', async () => {
+    function B() {
+      const children = [readText('Hello'), readText('World')];
+      // Intentionally trigger a key warning here.
+      return (
+        <div>
+          {children.map(t => (
+            <span>{t}</span>
+          ))}
+        </div>
+      );
+    }
+    function C() {
+      return (
+        <inCorrectTag>
+          <Text text="Loading" />
+        </inCorrectTag>
+      );
+    }
+    function A() {
+      return (
+        <div>
+          <Suspense fallback={<C />}>
+            <B />
+          </Suspense>
+        </div>
+      );
+    }
+
+    // We can't use the toErrorDev helper here because this is an async act.
+    const originalConsoleError = console.error;
+    const mockError = jest.fn();
+    console.error = (...args) => {
+      mockError(...args.map(normalizeCodeLocInfo));
+    };
+
+    try {
+      await act(async () => {
+        const {startWriting} = ReactDOMFizzServer.pipeToNodeWritable(
+          <A />,
+          writable,
+        );
+        startWriting();
+      });
+
+      expect(getVisibleChildren(container)).toEqual(
+        <div>
+          <incorrecttag>Loading</incorrecttag>
+        </div>,
+      );
+
+      if (__DEV__) {
+        expect(mockError).toHaveBeenCalledWith(
+          'Warning: <%s /> is using incorrect casing. Use PascalCase for React components, or lowercase for HTML elements.%s',
+          'inCorrectTag',
+          '\n' +
+            '    in inCorrectTag (at **)\n' +
+            '    in C (at **)\n' +
+            '    in Suspense (at **)\n' +
+            '    in div (at **)\n' +
+            '    in A (at **)',
+        );
+        mockError.mockClear();
+      } else {
+        expect(mockError).not.toHaveBeenCalled();
+      }
+
+      await act(async () => {
+        resolveText('Hello');
+        resolveText('World');
+      });
+
+      if (__DEV__) {
+        expect(mockError).toHaveBeenCalledWith(
+          'Warning: Each child in a list should have a unique "key" prop.%s%s' +
+            ' See https://reactjs.org/link/warning-keys for more information.%s',
+          '\n\nCheck the top-level render call using <div>.',
+          '',
+          '\n' +
+            '    in span (at **)\n' +
+            '    in B (at **)\n' +
+            '    in Suspense (at **)\n' +
+            '    in div (at **)\n' +
+            '    in A (at **)',
+        );
+      } else {
+        expect(mockError).not.toHaveBeenCalled();
+      }
+
+      expect(getVisibleChildren(container)).toEqual(
+        <div>
+          <div>
+            <span>Hello</span>
+            <span>World</span>
+          </div>
+        </div>,
+      );
+    } finally {
+      console.error = originalConsoleError;
+    }
+  });
+
   // @gate experimental
   it('should can suspend in a class component with legacy context', async () => {
     class TestProvider extends React.Component {
@@ -1121,7 +1406,7 @@ describe('ReactDOMFizzServer', () => {
     // We're still showing a fallback.
 
     // Attempt to hydrate the content.
-    const root = ReactDOM.unstable_createRoot(container, {hydrate: true});
+    const root = ReactDOM.createRoot(container, {hydrate: true});
     root.render(<App isClient={true} />);
     Scheduler.unstable_flushAll();
 
@@ -1161,5 +1446,36 @@ describe('ReactDOMFizzServer', () => {
     );
 
     expect(loggedErrors).toEqual([theError]);
+  });
+
+  // @gate experimental
+  it('should be able to abort the fallback if the main content finishes first', async () => {
+    await act(async () => {
+      const {startWriting} = ReactDOMFizzServer.pipeToNodeWritable(
+        <Suspense fallback={<Text text="Loading Outer" />}>
+          <div>
+            <Suspense
+              fallback={
+                <div>
+                  <AsyncText text="Loading" />
+                  Inner
+                </div>
+              }>
+              <AsyncText text="Hello" />
+            </Suspense>
+          </div>
+        </Suspense>,
+        writable,
+      );
+      startWriting();
+    });
+    expect(getVisibleChildren(container)).toEqual('Loading Outer');
+    // We should have received a partial segment containing the a partial of the fallback.
+    expect(container.innerHTML).toContain('Inner');
+    await act(async () => {
+      resolveText('Hello');
+    });
+    // We should've been able to display the content without waiting for the rest of the fallback.
+    expect(getVisibleChildren(container)).toEqual(<div>Hello</div>);
   });
 });
