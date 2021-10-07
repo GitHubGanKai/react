@@ -59,6 +59,8 @@ import {inspectHooksOfFiber} from 'react-debug-tools';
 import {
   patch as patchConsole,
   registerRenderer as registerRendererWithConsole,
+  patchForStrictMode as patchConsoleForStrictMode,
+  unpatchForStrictMode as unpatchConsoleForStrictMode,
 } from './console';
 import {
   CONCURRENT_MODE_NUMBER,
@@ -83,6 +85,7 @@ import {format} from './utils';
 import {enableProfilerChangedHookIndices} from 'react-devtools-feature-flags';
 import is from 'shared/objectIs';
 import isArray from 'shared/isArray';
+import hasOwnProperty from 'shared/hasOwnProperty';
 
 import type {Fiber} from 'react-reconciler/src/ReactInternalTypes';
 import type {
@@ -740,17 +743,17 @@ export function attach(
       window.__REACT_DEVTOOLS_BREAK_ON_CONSOLE_ERRORS__ === true;
     const showInlineWarningsAndErrors =
       window.__REACT_DEVTOOLS_SHOW_INLINE_WARNINGS_AND_ERRORS__ !== false;
-    if (
-      appendComponentStack ||
-      breakOnConsoleErrors ||
-      showInlineWarningsAndErrors
-    ) {
-      patchConsole({
-        appendComponentStack,
-        breakOnConsoleErrors,
-        showInlineWarningsAndErrors,
-      });
-    }
+    const hideConsoleLogsInStrictMode =
+      window.__REACT_DEVTOOLS_HIDE_CONSOLE_LOGS_IN_STRICT_MODE__ === true;
+    const browserTheme = window.__REACT_DEVTOOLS_BROWSER_THEME__;
+
+    patchConsole({
+      appendComponentStack,
+      breakOnConsoleErrors,
+      showInlineWarningsAndErrors,
+      hideConsoleLogsInStrictMode,
+      browserTheme,
+    });
   }
 
   const debug = (
@@ -960,6 +963,7 @@ export function attach(
 
     return false;
   }
+
   // NOTICE Keep in sync with shouldFilterFiber() and other get*ForFiber methods
   function getElementTypeForFiber(fiber: Fiber): ElementType {
     const {type, tag} = fiber;
@@ -1139,6 +1143,13 @@ export function attach(
 
     untrackFibersSet.add(fiber);
 
+    // React may detach alternate pointers during unmount;
+    // Since our untracking code is async, we should explicily track the pending alternate here as well.
+    const alternate = fiber.alternate;
+    if (alternate !== null) {
+      untrackFibersSet.add(alternate);
+    }
+
     if (untrackFibersTimeoutID === null) {
       untrackFibersTimeoutID = setTimeout(untrackFibers, 1000);
     }
@@ -1236,6 +1247,7 @@ export function attach(
 
   function updateContextsForFiber(fiber: Fiber) {
     switch (getElementTypeForFiber(fiber)) {
+      case ElementTypeFunction:
       case ElementTypeClass:
         if (idToContextsMap !== null) {
           const id = getFiberIDThrows(fiber);
@@ -1254,11 +1266,12 @@ export function attach(
   const NO_CONTEXT = {};
 
   function getContextsForFiber(fiber: Fiber): [Object, any] | null {
+    let legacyContext = NO_CONTEXT;
+    let modernContext = NO_CONTEXT;
+
     switch (getElementTypeForFiber(fiber)) {
       case ElementTypeClass:
         const instance = fiber.stateNode;
-        let legacyContext = NO_CONTEXT;
-        let modernContext = NO_CONTEXT;
         if (instance != null) {
           if (
             instance.constructor &&
@@ -1272,6 +1285,13 @@ export function attach(
             }
           }
         }
+        return [legacyContext, modernContext];
+      case ElementTypeFunction:
+        const dependencies = fiber.dependencies;
+        if (dependencies && dependencies.firstContext) {
+          modernContext = dependencies.firstContext;
+        }
+
         return [legacyContext, modernContext];
       default:
         return null;
@@ -1291,31 +1311,50 @@ export function attach(
   }
 
   function getContextChangedKeys(fiber: Fiber): null | boolean | Array<string> {
-    switch (getElementTypeForFiber(fiber)) {
-      case ElementTypeClass:
-        if (idToContextsMap !== null) {
-          const id = getFiberIDThrows(fiber);
-          const prevContexts = idToContextsMap.has(id)
-            ? idToContextsMap.get(id)
-            : null;
-          const nextContexts = getContextsForFiber(fiber);
+    if (idToContextsMap !== null) {
+      const id = getFiberIDThrows(fiber);
+      const prevContexts = idToContextsMap.has(id)
+        ? idToContextsMap.get(id)
+        : null;
+      const nextContexts = getContextsForFiber(fiber);
 
-          if (prevContexts == null || nextContexts == null) {
-            return null;
+      if (prevContexts == null || nextContexts == null) {
+        return null;
+      }
+
+      const [prevLegacyContext, prevModernContext] = prevContexts;
+      const [nextLegacyContext, nextModernContext] = nextContexts;
+
+      switch (getElementTypeForFiber(fiber)) {
+        case ElementTypeClass:
+          if (prevContexts && nextContexts) {
+            if (nextLegacyContext !== NO_CONTEXT) {
+              return getChangedKeys(prevLegacyContext, nextLegacyContext);
+            } else if (nextModernContext !== NO_CONTEXT) {
+              return prevModernContext !== nextModernContext;
+            }
           }
+          break;
+        case ElementTypeFunction:
+          if (nextModernContext !== NO_CONTEXT) {
+            let prevContext = prevModernContext;
+            let nextContext = nextModernContext;
 
-          const [prevLegacyContext, prevModernContext] = prevContexts;
-          const [nextLegacyContext, nextModernContext] = nextContexts;
+            while (prevContext && nextContext) {
+              if (!is(prevContext.memoizedValue, nextContext.memoizedValue)) {
+                return true;
+              }
 
-          if (nextLegacyContext !== NO_CONTEXT) {
-            return getChangedKeys(prevLegacyContext, nextLegacyContext);
-          } else if (nextModernContext !== NO_CONTEXT) {
-            return prevModernContext !== nextModernContext;
+              prevContext = prevContext.next;
+              nextContext = nextContext.next;
+            }
+
+            return false;
           }
-        }
-        break;
-      default:
-        break;
+          break;
+        default:
+          break;
+      }
     }
     return null;
   }
@@ -1342,13 +1381,13 @@ export function attach(
       return false;
     }
     const {deps} = memoizedState;
-    const hasOwnProperty = Object.prototype.hasOwnProperty.bind(memoizedState);
+    const boundHasOwnProperty = hasOwnProperty.bind(memoizedState);
     return (
-      hasOwnProperty('create') &&
-      hasOwnProperty('destroy') &&
-      hasOwnProperty('deps') &&
-      hasOwnProperty('next') &&
-      hasOwnProperty('tag') &&
+      boundHasOwnProperty('create') &&
+      boundHasOwnProperty('destroy') &&
+      boundHasOwnProperty('deps') &&
+      boundHasOwnProperty('next') &&
+      boundHasOwnProperty('tag') &&
       (deps === null || isArray(deps))
     );
   }
@@ -1475,11 +1514,16 @@ export function attach(
 
   type OperationsArray = Array<number>;
 
+  type StringTableEntry = {|
+    encodedString: Array<number>,
+    id: number,
+  |};
+
   const pendingOperations: OperationsArray = [];
   const pendingRealUnmountedIDs: Array<number> = [];
   const pendingSimulatedUnmountedIDs: Array<number> = [];
   let pendingOperationsQueue: Array<OperationsArray> | null = [];
-  const pendingStringTable: Map<string, number> = new Map();
+  const pendingStringTable: Map<string, StringTableEntry> = new Map();
   let pendingStringTableLength: number = 0;
   let pendingUnmountedRootID: number | null = null;
 
@@ -1697,13 +1741,19 @@ export function attach(
     // Now fill in the string table.
     // [stringTableLength, str1Length, ...str1, str2Length, ...str2, ...]
     operations[i++] = pendingStringTableLength;
-    pendingStringTable.forEach((value, key) => {
-      operations[i++] = key.length;
-      const encodedKey = utfEncodeString(key);
-      for (let j = 0; j < encodedKey.length; j++) {
-        operations[i + j] = encodedKey[j];
+    pendingStringTable.forEach((entry, stringKey) => {
+      const encodedString = entry.encodedString;
+
+      // Don't use the string length.
+      // It won't work for multibyte characters (like emoji).
+      const length = encodedString.length;
+
+      operations[i++] = length;
+      for (let j = 0; j < length; j++) {
+        operations[i + j] = encodedString[j];
       }
-      i += key.length;
+
+      i += length;
     });
 
     if (numUnmountIDs > 0) {
@@ -1750,21 +1800,31 @@ export function attach(
     pendingStringTableLength = 0;
   }
 
-  function getStringID(str: string | null): number {
-    if (str === null) {
+  function getStringID(string: string | null): number {
+    if (string === null) {
       return 0;
     }
-    const existingID = pendingStringTable.get(str);
-    if (existingID !== undefined) {
-      return existingID;
+    const existingEntry = pendingStringTable.get(string);
+    if (existingEntry !== undefined) {
+      return existingEntry.id;
     }
-    const stringID = pendingStringTable.size + 1;
-    pendingStringTable.set(str, stringID);
-    // The string table total length needs to account
-    // both for the string length, and for the array item
-    // that contains the length itself. Hence + 1.
-    pendingStringTableLength += str.length + 1;
-    return stringID;
+
+    const id = pendingStringTable.size + 1;
+    const encodedString = utfEncodeString(string);
+
+    pendingStringTable.set(string, {
+      encodedString,
+      id,
+    });
+
+    // The string table total length needs to account both for the string length,
+    // and for the array item that contains the length itself.
+    //
+    // Don't use string length for this table.
+    // It won't work for multibyte characters (like emoji).
+    pendingStringTableLength += encodedString.length + 1;
+
+    return id;
   }
 
   function recordMount(fiber: Fiber, parentFiber: Fiber | null) {
@@ -1809,7 +1869,7 @@ export function attach(
 
       // This check is a guard to handle a React element that has been modified
       // in such a way as to bypass the default stringification of the "key" property.
-      const keyString = key === null ? null : '' + key;
+      const keyString = key === null ? null : String(key);
       const keyStringID = getStringID(keyString);
 
       pushOperation(TREE_OPERATION_ADD);
@@ -2859,6 +2919,7 @@ export function attach(
     // Otherwise B has to be current branch.
     return alternate;
   }
+
   // END copied code
 
   function prepareViewAttributeSource(
@@ -3378,12 +3439,13 @@ export function attach(
     requestID: number,
     id: number,
     path: Array<string | number> | null,
+    forceFullData: boolean,
   ): InspectedElementPayload {
     if (path !== null) {
       mergeInspectedPaths(path);
     }
 
-    if (isMostRecentlyInspectedElement(id)) {
+    if (isMostRecentlyInspectedElement(id) && !forceFullData) {
       if (!hasElementUpdatedSinceLastInspected) {
         if (path !== null) {
           let secondaryCategory = null;
@@ -3860,6 +3922,7 @@ export function attach(
   // Map of id and its force error status: true (error), false (toggled off),
   // null (do nothing)
   const forceErrorForFiberIDs = new Map();
+
   function shouldErrorFiberAccordingToMap(fiber) {
     if (typeof setErrorHandler !== 'function') {
       throw new Error(
@@ -3924,6 +3987,7 @@ export function attach(
   }
 
   const forceFallbackForSuspenseIDs = new Set();
+
   function shouldSuspendFiberAccordingToSet(fiber) {
     const maybeID = getFiberIDUnsafe(((fiber: any): Fiber));
     return maybeID !== null && forceFallbackForSuspenseIDs.has(maybeID);
@@ -4210,6 +4274,7 @@ export function attach(
     handlePostCommitFiberRoot,
     inspectElement,
     logElementToConsole,
+    patchConsoleForStrictMode,
     prepareViewAttributeSource,
     prepareViewElementSource,
     overrideError,
@@ -4222,6 +4287,7 @@ export function attach(
     startProfiling,
     stopProfiling,
     storeAsGlobal,
+    unpatchConsoleForStrictMode,
     updateComponentFilters,
   };
 }

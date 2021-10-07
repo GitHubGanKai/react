@@ -176,6 +176,7 @@ describe('InspectedElement', () => {
           "a": 1,
           "b": "abc",
         },
+        "rootType": "render()",
         "state": null,
       }
     `);
@@ -381,6 +382,67 @@ describe('InspectedElement', () => {
         "b": "def",
       }
     `);
+  });
+
+  // See github.com/facebook/react/issues/22241#issuecomment-931299972
+  it('should properly recover from a cache miss on the frontend', async () => {
+    let targetRenderCount = 0;
+
+    const Wrapper = ({children}) => children;
+    const Target = React.memo(props => {
+      targetRenderCount++;
+      // Even though his hook isn't referenced, it's used to observe backend rendering.
+      React.useState(0);
+      return null;
+    });
+
+    const container = document.createElement('div');
+    await utils.actAsync(() =>
+      legacyRender(
+        <Wrapper>
+          <Target a={1} b="abc" />
+        </Wrapper>,
+        container,
+      ),
+    );
+
+    targetRenderCount = 0;
+
+    let inspectedElement = await inspectElementAtIndex(1);
+    expect(targetRenderCount).toBe(1);
+    expect(inspectedElement.props).toMatchInlineSnapshot(`
+      Object {
+        "a": 1,
+        "b": "abc",
+      }
+    `);
+
+    const prevInspectedElement = inspectedElement;
+
+    // This test causes an intermediate error to be logged but we can ignore it.
+    console.error = () => {};
+
+    // Wait for our check-for-updates poll to get the new data.
+    jest.runOnlyPendingTimers();
+    await Promise.resolve();
+
+    // Clear the frontend cache to simulate DevTools being closed and re-opened.
+    // The backend still thinks the most recently-inspected element is still cached,
+    // so the frontend needs to tell it to resend a full value.
+    // We can verify this by asserting that the component is re-rendered again.
+    testRendererInstance = TestRenderer.create(null, {
+      unstable_isConcurrent: true,
+    });
+
+    const {
+      clearCacheForTests,
+    } = require('react-devtools-shared/src/inspectedElementMutableSource');
+    clearCacheForTests();
+
+    targetRenderCount = 0;
+    inspectedElement = await inspectElementAtIndex(1);
+    expect(targetRenderCount).toBe(1);
+    expect(inspectedElement).toEqual(prevInspectedElement);
   });
 
   it('should temporarily disable console logging when re-running a component to inspect its hooks', async () => {
@@ -1584,6 +1646,7 @@ describe('InspectedElement', () => {
           "a": 1,
           "b": "abc",
         },
+        "rootType": "render()",
         "state": null,
       }
     `);
@@ -1893,6 +1956,117 @@ describe('InspectedElement', () => {
         },
       }
     `);
+  });
+
+  // Regression test for github.com/facebook/react/issues/22099
+  it('should not error when an unchanged component is re-inspected after component filters changed', async () => {
+    const Example = () => <div />;
+
+    const container = document.createElement('div');
+    await utils.actAsync(() => legacyRender(<Example />, container));
+
+    // Select/inspect element
+    let inspectedElement = await inspectElementAtIndex(0);
+    expect(inspectedElement).toMatchInlineSnapshot(`
+      Object {
+        "context": null,
+        "events": undefined,
+        "hooks": null,
+        "id": 2,
+        "owners": null,
+        "props": Object {},
+        "rootType": "render()",
+        "state": null,
+      }
+    `);
+
+    await utils.actAsync(async () => {
+      // Ignore transient warning this causes
+      utils.withErrorsOrWarningsIgnored(['No element found with id'], () => {
+        store.componentFilters = [];
+
+        // Flush events to the renderer.
+        jest.runOnlyPendingTimers();
+      });
+    }, false);
+
+    // HACK: Recreate TestRenderer instance because we rely on default state values
+    // from props like defaultSelectedElementID and it's easier to reset here than
+    // to read the TreeDispatcherContext and update the selected ID that way.
+    // We're testing the inspected values here, not the context wiring, so that's ok.
+    testRendererInstance = TestRenderer.create(null, {
+      unstable_isConcurrent: true,
+    });
+
+    // Select/inspect the same element again
+    inspectedElement = await inspectElementAtIndex(0);
+    expect(inspectedElement).toMatchInlineSnapshot(`
+      Object {
+        "context": null,
+        "events": undefined,
+        "hooks": null,
+        "id": 2,
+        "owners": null,
+        "props": Object {},
+        "rootType": "render()",
+        "state": null,
+      }
+    `);
+  });
+
+  it('should display the root type for ReactDOM.hydrate', async () => {
+    const Example = () => <div />;
+
+    await utils.actAsync(() => {
+      const container = document.createElement('div');
+      container.innerHTML = '<div></div>';
+      withErrorsOrWarningsIgnored(
+        ['ReactDOM.hydrate is no longer supported in React 18'],
+        () => {
+          ReactDOM.hydrate(<Example />, container);
+        },
+      );
+    }, false);
+
+    const inspectedElement = await inspectElementAtIndex(0);
+    expect(inspectedElement.rootType).toMatchInlineSnapshot(`"hydrate()"`);
+  });
+
+  it('should display the root type for ReactDOM.render', async () => {
+    const Example = () => <div />;
+
+    await utils.actAsync(() => {
+      const container = document.createElement('div');
+      legacyRender(<Example />, container);
+    }, false);
+
+    const inspectedElement = await inspectElementAtIndex(0);
+    expect(inspectedElement.rootType).toMatchInlineSnapshot(`"render()"`);
+  });
+
+  it('should display the root type for ReactDOM.hydrateRoot', async () => {
+    const Example = () => <div />;
+
+    await utils.actAsync(() => {
+      const container = document.createElement('div');
+      container.innerHTML = '<div></div>';
+      ReactDOM.hydrateRoot(container).render(<Example />);
+    }, false);
+
+    const inspectedElement = await inspectElementAtIndex(0);
+    expect(inspectedElement.rootType).toMatchInlineSnapshot(`"hydrateRoot()"`);
+  });
+
+  it('should display the root type for ReactDOM.createRoot', async () => {
+    const Example = () => <div />;
+
+    await utils.actAsync(() => {
+      const container = document.createElement('div');
+      ReactDOM.createRoot(container).render(<Example />);
+    }, false);
+
+    const inspectedElement = await inspectElementAtIndex(0);
+    expect(inspectedElement.rootType).toMatchInlineSnapshot(`"createRoot()"`);
   });
 
   describe('$r', () => {

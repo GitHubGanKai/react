@@ -7,7 +7,7 @@
  * @flow
  */
 
-// Type utilities
+import type {ScrollState} from './view-base/utils/scrollState';
 
 // Source: https://github.com/facebook/flow/issues/4002#issuecomment-323612798
 // eslint-disable-next-line no-unused-vars
@@ -60,9 +60,18 @@ export type SuspenseEvent = {|
   duration: number | null,
   +id: string,
   +phase: Phase | null,
+  promiseName: string | null,
   resolution: 'rejected' | 'resolved' | 'unresolved',
   resuspendTimestamps: Array<number> | null,
   +type: 'suspense',
+|};
+
+export type ThrownError = {|
+  +componentName?: string,
+  +message: string,
+  +phase: Phase,
+  +timestamp: Milliseconds,
+  +type: 'thrown-error',
 |};
 
 export type SchedulingEvent =
@@ -91,6 +100,19 @@ export type ReactMeasure = {|
   +depth: number,
 |};
 
+export type NetworkMeasure = {|
+  +depth: number,
+  finishTimestamp: Milliseconds,
+  firstReceivedDataTimestamp: Milliseconds,
+  lastReceivedDataTimestamp: Milliseconds,
+  priority: string,
+  receiveResponseTimestamp: Milliseconds,
+  +requestId: string,
+  requestMethod: string,
+  sendRequestTimestamp: Milliseconds,
+  url: string,
+|};
+
 export type ReactComponentMeasure = {|
   +componentName: string,
   duration: Milliseconds,
@@ -115,6 +137,14 @@ export type UserTimingMark = {|
   timestamp: Milliseconds,
 |};
 
+export type Snapshot = {|
+  height: number,
+  image: Image | null,
+  +imageSource: string,
+  +timestamp: Milliseconds,
+  width: number,
+|};
+
 /**
  * A "layer" of stack frames in the profiler UI, i.e. all stack frames of the
  * same depth across all stack traces. Displayed as a flamechart row in the UI.
@@ -123,27 +153,49 @@ export type FlamechartStackLayer = FlamechartStackFrame[];
 
 export type Flamechart = FlamechartStackLayer[];
 
+export type HorizontalScrollStateChangeCallback = (
+  scrollState: ScrollState,
+) => void;
+
+// Imperative view state that corresponds to profiler data.
+// This state lives outside of React's lifecycle
+// and should be erased/reset whenever new profiler data is loaded.
+export type ViewState = {|
+  horizontalScrollState: ScrollState,
+  onHorizontalScrollStateChange: (
+    callback: HorizontalScrollStateChangeCallback,
+  ) => void,
+  updateHorizontalScrollState: (scrollState: ScrollState) => void,
+  viewToMutableViewStateMap: Map<string, mixed>,
+|};
+
 export type ReactProfilerData = {|
+  batchUIDToMeasuresMap: Map<BatchUID, ReactMeasure[]>,
   componentMeasures: ReactComponentMeasure[],
   duration: number,
   flamechart: Flamechart,
   laneToLabelMap: Map<ReactLane, string>,
-  measures: ReactMeasure[],
+  laneToReactMeasureMap: Map<ReactLane, ReactMeasure[]>,
   nativeEvents: NativeEvent[],
+  networkMeasures: NetworkMeasure[],
   otherUserTimingMarks: UserTimingMark[],
   reactVersion: string | null,
   schedulingEvents: SchedulingEvent[],
+  snapshots: Snapshot[],
   startTime: number,
   suspenseEvents: SuspenseEvent[],
+  thrownErrors: ThrownError[],
 |};
 
 export type ReactHoverContextInfo = {|
   componentMeasure: ReactComponentMeasure | null,
-  data: $ReadOnly<ReactProfilerData> | null,
   flamechartStackFrame: FlamechartStackFrame | null,
   measure: ReactMeasure | null,
   nativeEvent: NativeEvent | null,
+  networkMeasure: NetworkMeasure | null,
   schedulingEvent: SchedulingEvent | null,
   suspenseEvent: SuspenseEvent | null,
+  snapshot: Snapshot | null,
+  thrownError: ThrownError | null,
   userTimingMark: UserTimingMark | null,
 |};

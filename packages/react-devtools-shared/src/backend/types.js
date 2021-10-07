@@ -339,6 +339,7 @@ export type RendererInterface = {
     requestID: number,
     id: number,
     inspectedPaths: Object,
+    forceFullData: boolean,
   ) => InspectedElementPayload,
   logElementToConsole: (id: number) => void,
   overrideError: (id: number, forceError: boolean) => void,
@@ -350,6 +351,7 @@ export type RendererInterface = {
     path: Array<string | number>,
     value: any,
   ) => void,
+  patchConsoleForStrictMode: () => void,
   prepareViewAttributeSource: (
     id: number,
     path: Array<string | number>,
@@ -372,6 +374,7 @@ export type RendererInterface = {
     path: Array<string | number>,
     count: number,
   ) => void,
+  unpatchConsoleForStrictMode: () => void,
   updateComponentFilters: (componentFilters: Array<ComponentFilter>) => void,
   ...
 };
@@ -406,5 +409,8 @@ export type DevToolsHook = {
     // Added in v16.9 to support Fast Refresh
     didError?: boolean,
   ) => void,
+
+  // Testing
+  dangerous_setTargetConsoleForTesting?: (fakeConsole: Object) => void,
   ...
 };

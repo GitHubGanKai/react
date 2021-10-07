@@ -37,6 +37,7 @@ import {
   deletedTreeCleanUpLevel,
   enableSuspenseLayoutEffectSemantics,
   enableUpdaterTracking,
+  warnAboutCallbackRefReturningFunction,
 } from 'shared/ReactFeatureFlags';
 import {
   FunctionComponent,
@@ -77,7 +78,6 @@ import {
   Visibility,
 } from './ReactFiberFlags';
 import getComponentNameFromFiber from 'react-reconciler/src/getComponentNameFromFiber';
-import invariant from 'shared/invariant';
 import {
   resetCurrentFiber as resetCurrentDebugFiberInDEV,
   setCurrentFiber as setCurrentDebugFiberInDEV,
@@ -136,6 +136,7 @@ import {
   NoFlags as NoHookEffect,
   HasEffect as HookHasEffect,
   Layout as HookLayout,
+  Insertion as HookInsertion,
   Passive as HookPassive,
 } from './ReactHookEffectTags';
 import {didWarnAboutReassigningProps} from './ReactFiberBeginWork.new';
@@ -249,6 +250,7 @@ function safelyDetachRef(current: Fiber, nearestMountedAncestor: Fiber | null) {
   const ref = current.ref;
   if (ref !== null) {
     if (typeof ref === 'function') {
+      let retVal;
       try {
         if (
           enableProfilerTimer &&
@@ -257,16 +259,28 @@ function safelyDetachRef(current: Fiber, nearestMountedAncestor: Fiber | null) {
         ) {
           try {
             startLayoutEffectTimer();
-            ref(null);
+            retVal = ref(null);
           } finally {
             recordLayoutEffectDuration(current);
           }
         } else {
-          ref(null);
+          retVal = ref(null);
         }
       } catch (error) {
         reportUncaughtErrorInDEV(error);
         captureCommitPhaseError(current, nearestMountedAncestor, error);
+      }
+      if (__DEV__) {
+        if (
+          warnAboutCallbackRefReturningFunction &&
+          typeof retVal === 'function'
+        ) {
+          console.error(
+            'Unexpected return value from a callback ref in %s. ' +
+              'A callback ref should not return a function.',
+            getComponentNameFromFiber(current),
+          );
+        }
       }
     } else {
       ref.current = null;
@@ -458,8 +472,7 @@ function commitBeforeMutationEffectsOnFiber(finishedWork: Fiber) {
         // Nothing to do for these component types
         break;
       default: {
-        invariant(
-          false,
+        throw new Error(
           'This unit of work tag should not have side-effects. This error is ' +
             'likely caused by a bug in React. Please file an issue.',
         );
@@ -507,7 +520,7 @@ function commitHookEffectListUnmount(
   }
 }
 
-function commitHookEffectListMount(tag: number, finishedWork: Fiber) {
+function commitHookEffectListMount(tag: HookFlags, finishedWork: Fiber) {
   const updateQueue: FunctionComponentUpdateQueue | null = (finishedWork.updateQueue: any);
   const lastEffect = updateQueue !== null ? updateQueue.lastEffect : null;
   if (lastEffect !== null) {
@@ -522,6 +535,14 @@ function commitHookEffectListMount(tag: number, finishedWork: Fiber) {
         if (__DEV__) {
           const destroy = effect.destroy;
           if (destroy !== undefined && typeof destroy !== 'function') {
+            let hookName;
+            if ((effect.tag & HookLayout) !== NoFlags) {
+              hookName = 'useLayoutEffect';
+            } else if ((effect.tag & HookInsertion) !== NoFlags) {
+              hookName = 'useInsertionEffect';
+            } else {
+              hookName = 'useEffect';
+            }
             let addendum;
             if (destroy === null) {
               addendum =
@@ -529,10 +550,13 @@ function commitHookEffectListMount(tag: number, finishedWork: Fiber) {
                 'up, return undefined (or nothing).';
             } else if (typeof destroy.then === 'function') {
               addendum =
-                '\n\nIt looks like you wrote useEffect(async () => ...) or returned a Promise. ' +
+                '\n\nIt looks like you wrote ' +
+                hookName +
+                '(async () => ...) or returned a Promise. ' +
                 'Instead, write the async function inside your effect ' +
                 'and call it immediately:\n\n' +
-                'useEffect(() => {\n' +
+                hookName +
+                '(() => {\n' +
                 '  async function fetchData() {\n' +
                 '    // You can await here\n' +
                 '    const response = await MyAPI.getData(someId);\n' +
@@ -545,8 +569,9 @@ function commitHookEffectListMount(tag: number, finishedWork: Fiber) {
               addendum = ' You returned: ' + destroy;
             }
             console.error(
-              'An effect function must not return anything besides a function, ' +
+              '%s must not return anything besides a function, ' +
                 'which is used for clean-up.%s',
+              hookName,
               addendum,
             );
           }
@@ -918,8 +943,7 @@ function commitLayoutEffectOnFiber(
       case LegacyHiddenComponent:
         break;
       default:
-        invariant(
-          false,
+        throw new Error(
           'This unit of work tag should not have side-effects. This error is ' +
             'likely caused by a bug in React. Please file an issue.',
         );
@@ -1064,6 +1088,7 @@ function commitAttachRef(finishedWork: Fiber) {
       instanceToUse = instance;
     }
     if (typeof ref === 'function') {
+      let retVal;
       if (
         enableProfilerTimer &&
         enableProfilerCommitHooks &&
@@ -1071,12 +1096,24 @@ function commitAttachRef(finishedWork: Fiber) {
       ) {
         try {
           startLayoutEffectTimer();
-          ref(instanceToUse);
+          retVal = ref(instanceToUse);
         } finally {
           recordLayoutEffectDuration(finishedWork);
         }
       } else {
-        ref(instanceToUse);
+        retVal = ref(instanceToUse);
+      }
+      if (__DEV__) {
+        if (
+          warnAboutCallbackRefReturningFunction &&
+          typeof retVal === 'function'
+        ) {
+          console.error(
+            'Unexpected return value from a callback ref in %s. ' +
+              'A callback ref should not return a function.',
+            getComponentNameFromFiber(finishedWork),
+          );
+        }
       }
     } else {
       if (__DEV__) {
@@ -1143,7 +1180,10 @@ function commitUnmount(
           do {
             const {destroy, tag} = effect;
             if (destroy !== undefined) {
-              if ((tag & HookLayout) !== NoHookEffect) {
+              if (
+                (tag & HookInsertion) !== NoHookEffect ||
+                (tag & HookLayout) !== NoHookEffect
+              ) {
                 if (
                   enableProfilerTimer &&
                   enableProfilerCommitHooks &&
@@ -1389,8 +1429,8 @@ function commitContainer(finishedWork: Fiber) {
       return;
     }
   }
-  invariant(
-    false,
+
+  throw new Error(
     'This unit of work tag should not have side-effects. This error is ' +
       'likely caused by a bug in React. Please file an issue.',
   );
@@ -1404,8 +1444,8 @@ function getHostParentFiber(fiber: Fiber): Fiber {
     }
     parent = parent.return;
   }
-  invariant(
-    false,
+
+  throw new Error(
     'Expected to find a host parent. This error is likely caused by a bug ' +
       'in React. Please file an issue.',
   );
@@ -1492,8 +1532,7 @@ function commitPlacement(finishedWork: Fiber): void {
       break;
     // eslint-disable-next-line-no-fallthrough
     default:
-      invariant(
-        false,
+      throw new Error(
         'Invalid host parent fiber. This error is likely caused by a bug ' +
           'in React. Please file an issue.',
       );
@@ -1598,11 +1637,13 @@ function unmountHostComponents(
     if (!currentParentIsValid) {
       let parent = node.return;
       findParent: while (true) {
-        invariant(
-          parent !== null,
-          'Expected to find a host parent. This error is likely caused by ' +
-            'a bug in React. Please file an issue.',
-        );
+        if (parent === null) {
+          throw new Error(
+            'Expected to find a host parent. This error is likely caused by ' +
+              'a bug in React. Please file an issue.',
+          );
+        }
+
         const parentStateNode = parent.stateNode;
         switch (parent.tag) {
           case HostComponent:
@@ -1728,6 +1769,13 @@ function commitWork(current: Fiber | null, finishedWork: Fiber): void {
       case ForwardRef:
       case MemoComponent:
       case SimpleMemoComponent: {
+        commitHookEffectListUnmount(
+          HookInsertion | HookHasEffect,
+          finishedWork,
+          finishedWork.return,
+        );
+        commitHookEffectListMount(HookInsertion | HookHasEffect, finishedWork);
+
         // Layout effects are destroyed during the mutation phase so that all
         // destroy functions for all fibers are called before any create functions.
         // This prevents sibling component effects from interfering with each other,
@@ -1777,9 +1825,9 @@ function commitWork(current: Fiber | null, finishedWork: Fiber): void {
       case HostRoot: {
         if (supportsHydration) {
           const root: FiberRoot = finishedWork.stateNode;
-          if (root.hydrate) {
+          if (root.isDehydrated) {
             // We've just hydrated. No need to hydrate again.
-            root.hydrate = false;
+            root.isDehydrated = false;
             commitHydratedContainer(root.containerInfo);
           }
         }
@@ -1800,6 +1848,12 @@ function commitWork(current: Fiber | null, finishedWork: Fiber): void {
     case ForwardRef:
     case MemoComponent:
     case SimpleMemoComponent: {
+      commitHookEffectListUnmount(
+        HookInsertion | HookHasEffect,
+        finishedWork,
+        finishedWork.return,
+      );
+      commitHookEffectListMount(HookInsertion | HookHasEffect, finishedWork);
       // Layout effects are destroyed during the mutation phase so that all
       // destroy functions for all fibers are called before any create functions.
       // This prevents sibling component effects from interfering with each other,
@@ -1859,11 +1913,13 @@ function commitWork(current: Fiber | null, finishedWork: Fiber): void {
       return;
     }
     case HostText: {
-      invariant(
-        finishedWork.stateNode !== null,
-        'This should have a text node initialized. This error is likely ' +
-          'caused by a bug in React. Please file an issue.',
-      );
+      if (finishedWork.stateNode === null) {
+        throw new Error(
+          'This should have a text node initialized. This error is likely ' +
+            'caused by a bug in React. Please file an issue.',
+        );
+      }
+
       const textInstance: TextInstance = finishedWork.stateNode;
       const newText: string = finishedWork.memoizedProps;
       // For hydration we reuse the update path but we treat the oldProps
@@ -1877,9 +1933,9 @@ function commitWork(current: Fiber | null, finishedWork: Fiber): void {
     case HostRoot: {
       if (supportsHydration) {
         const root: FiberRoot = finishedWork.stateNode;
-        if (root.hydrate) {
+        if (root.isDehydrated) {
           // We've just hydrated. No need to hydrate again.
-          root.hydrate = false;
+          root.isDehydrated = false;
           commitHydratedContainer(root.containerInfo);
         }
       }
@@ -1909,8 +1965,8 @@ function commitWork(current: Fiber | null, finishedWork: Fiber): void {
       break;
     }
   }
-  invariant(
-    false,
+
+  throw new Error(
     'This unit of work tag should not have side-effects. This error is ' +
       'likely caused by a bug in React. Please file an issue.',
   );
@@ -2095,7 +2151,7 @@ function commitMutationEffectsOnFiber(finishedWork: Fiber, root: FiberRoot) {
   // TODO: The factoring of this phase could probably be improved. Consider
   // switching on the type of work before checking the flags. That's what
   // we do in all the other phases. I think this one is only different
-  // because of the shared reconcilation logic below.
+  // because of the shared reconciliation logic below.
   const flags = finishedWork.flags;
 
   if (flags & ContentReset) {

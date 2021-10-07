@@ -17,7 +17,7 @@ import {
 } from '../../constants';
 import REACT_VERSION from 'shared/ReactVersion';
 
-describe(getLanesFromTransportDecimalBitmask, () => {
+describe('getLanesFromTransportDecimalBitmask', () => {
   it('should return array of lane numbers from bitmask string', () => {
     expect(getLanesFromTransportDecimalBitmask('1')).toEqual([0]);
     expect(getLanesFromTransportDecimalBitmask('512')).toEqual([9]);
@@ -57,7 +57,7 @@ describe(getLanesFromTransportDecimalBitmask, () => {
   });
 });
 
-describe(preprocessData, () => {
+describe('preprocessData', () => {
   let React;
   let ReactDOM;
   let Scheduler;
@@ -217,11 +217,11 @@ describe(preprocessData, () => {
     delete global.performance;
   });
 
-  it('should throw given an empty timeline', () => {
-    expect(() => preprocessData([])).toThrow();
+  it('should throw given an empty timeline', async () => {
+    await expect(async () => preprocessData([])).rejects.toThrow();
   });
 
-  it('should throw given a timeline with no Profile event', () => {
+  it('should throw given a timeline with no Profile event', async () => {
     const randomSample = createUserTimingEntry({
       dur: 100,
       tdur: 200,
@@ -231,10 +231,33 @@ describe(preprocessData, () => {
       args: {},
     });
 
-    expect(() => preprocessData([randomSample])).toThrow();
+    await expect(async () => preprocessData([randomSample])).rejects.toThrow();
   });
 
-  it('should return empty data given a timeline with no React scheduling profiling marks', () => {
+  it('should throw given a timeline without an explicit profiler version mark nor any other React marks', async () => {
+    const cpuProfilerSample = creactCpuProfilerSample();
+
+    await expect(
+      async () => await preprocessData([cpuProfilerSample]),
+    ).rejects.toThrow(
+      'Please provide profiling data from an React application',
+    );
+  });
+
+  it('should throw given a timeline with React scheduling marks, but without an explicit profiler version mark', async () => {
+    const cpuProfilerSample = creactCpuProfilerSample();
+    const scheduleRenderSample = createUserTimingEntry({
+      cat: 'blink.user_timing',
+      name: '--schedule-render-512-',
+    });
+    const samples = [cpuProfilerSample, scheduleRenderSample];
+
+    await expect(async () => await preprocessData(samples)).rejects.toThrow(
+      'This version of profiling data is not supported',
+    );
+  });
+
+  it('should return empty data given a timeline with no React scheduling profiling marks', async () => {
     const cpuProfilerSample = creactCpuProfilerSample();
     const randomSample = createUserTimingEntry({
       dur: 100,
@@ -246,13 +269,14 @@ describe(preprocessData, () => {
     });
 
     if (gate(flags => flags.enableSchedulingProfiler)) {
-      const data = preprocessData([
+      const data = await preprocessData([
         ...createBoilerplateEntries(),
         cpuProfilerSample,
         randomSample,
       ]);
       expect(data).toMatchInlineSnapshot(`
         Object {
+          "batchUIDToMeasuresMap": Map {},
           "componentMeasures": Array [],
           "duration": 0.005,
           "flamechart": Array [],
@@ -289,25 +313,60 @@ describe(preprocessData, () => {
             29 => "Idle",
             30 => "Offscreen",
           },
-          "measures": Array [],
+          "laneToReactMeasureMap": Map {
+            0 => Array [],
+            1 => Array [],
+            2 => Array [],
+            3 => Array [],
+            4 => Array [],
+            5 => Array [],
+            6 => Array [],
+            7 => Array [],
+            8 => Array [],
+            9 => Array [],
+            10 => Array [],
+            11 => Array [],
+            12 => Array [],
+            13 => Array [],
+            14 => Array [],
+            15 => Array [],
+            16 => Array [],
+            17 => Array [],
+            18 => Array [],
+            19 => Array [],
+            20 => Array [],
+            21 => Array [],
+            22 => Array [],
+            23 => Array [],
+            24 => Array [],
+            25 => Array [],
+            26 => Array [],
+            27 => Array [],
+            28 => Array [],
+            29 => Array [],
+            30 => Array [],
+          },
           "nativeEvents": Array [],
+          "networkMeasures": Array [],
           "otherUserTimingMarks": Array [],
           "reactVersion": "17.0.3",
           "schedulingEvents": Array [],
+          "snapshots": Array [],
           "startTime": 1,
           "suspenseEvents": Array [],
+          "thrownErrors": Array [],
         }
       `);
     }
   });
 
-  it('should process legacy data format (before lane labels were added)', () => {
+  it('should process legacy data format (before lane labels were added)', async () => {
     const cpuProfilerSample = creactCpuProfilerSample();
 
     if (gate(flags => flags.enableSchedulingProfiler)) {
       // Data below is hard-coded based on an older profile sample.
       // Should be fine since this is explicitly a legacy-format test.
-      const data = preprocessData([
+      const data = await preprocessData([
         ...createBoilerplateEntries(),
         cpuProfilerSample,
         createUserTimingEntry({
@@ -340,219 +399,377 @@ describe(preprocessData, () => {
         }),
       ]);
       expect(data).toMatchInlineSnapshot(`
+        Object {
+          "batchUIDToMeasuresMap": Map {
+            0 => Array [
               Object {
-                "componentMeasures": Array [],
-                "duration": 0.011,
-                "flamechart": Array [],
-                "laneToLabelMap": Map {
-                  0 => "Sync",
-                  1 => "InputContinuousHydration",
-                  2 => "InputContinuous",
-                  3 => "DefaultHydration",
-                  4 => "Default",
-                  5 => "TransitionHydration",
-                  6 => "Transition",
-                  7 => "Transition",
-                  8 => "Transition",
-                  9 => "Transition",
-                  10 => "Transition",
-                  11 => "Transition",
-                  12 => "Transition",
-                  13 => "Transition",
-                  14 => "Transition",
-                  15 => "Transition",
-                  16 => "Transition",
-                  17 => "Transition",
-                  18 => "Transition",
-                  19 => "Transition",
-                  20 => "Transition",
-                  21 => "Transition",
-                  22 => "Retry",
-                  23 => "Retry",
-                  24 => "Retry",
-                  25 => "Retry",
-                  26 => "Retry",
-                  27 => "SelectiveHydration",
-                  28 => "IdleHydration",
-                  29 => "Idle",
-                  30 => "Offscreen",
-                },
-                "measures": Array [
-                  Object {
-                    "batchUID": 0,
-                    "depth": 0,
-                    "duration": 0.004999999999999999,
-                    "lanes": Array [
-                      9,
-                    ],
-                    "timestamp": 0.006,
-                    "type": "render-idle",
-                  },
-                  Object {
-                    "batchUID": 0,
-                    "depth": 0,
-                    "duration": 0.001,
-                    "lanes": Array [
-                      9,
-                    ],
-                    "timestamp": 0.006,
-                    "type": "render",
-                  },
-                  Object {
-                    "batchUID": 0,
-                    "depth": 0,
-                    "duration": 0.002999999999999999,
-                    "lanes": Array [
-                      9,
-                    ],
-                    "timestamp": 0.008,
-                    "type": "commit",
-                  },
-                  Object {
-                    "batchUID": 0,
-                    "depth": 1,
-                    "duration": 0.0010000000000000009,
-                    "lanes": Array [
-                      9,
-                    ],
-                    "timestamp": 0.009,
-                    "type": "layout-effects",
-                  },
+                "batchUID": 0,
+                "depth": 0,
+                "duration": 0.004999999999999999,
+                "lanes": Array [
+                  9,
                 ],
-                "nativeEvents": Array [],
-                "otherUserTimingMarks": Array [],
-                "reactVersion": "17.0.3",
-                "schedulingEvents": Array [
-                  Object {
-                    "lanes": Array [
-                      9,
-                    ],
-                    "timestamp": 0.005,
-                    "type": "schedule-render",
-                    "warning": null,
-                  },
+                "timestamp": 0.006,
+                "type": "render-idle",
+              },
+              Object {
+                "batchUID": 0,
+                "depth": 0,
+                "duration": 0.001,
+                "lanes": Array [
+                  9,
                 ],
-                "startTime": 1,
-                "suspenseEvents": Array [],
-              }
-          `);
+                "timestamp": 0.006,
+                "type": "render",
+              },
+              Object {
+                "batchUID": 0,
+                "depth": 0,
+                "duration": 0.002999999999999999,
+                "lanes": Array [
+                  9,
+                ],
+                "timestamp": 0.008,
+                "type": "commit",
+              },
+              Object {
+                "batchUID": 0,
+                "depth": 1,
+                "duration": 0.0010000000000000009,
+                "lanes": Array [
+                  9,
+                ],
+                "timestamp": 0.009,
+                "type": "layout-effects",
+              },
+            ],
+          },
+          "componentMeasures": Array [],
+          "duration": 0.011,
+          "flamechart": Array [],
+          "laneToLabelMap": Map {
+            0 => "Sync",
+            1 => "InputContinuousHydration",
+            2 => "InputContinuous",
+            3 => "DefaultHydration",
+            4 => "Default",
+            5 => "TransitionHydration",
+            6 => "Transition",
+            7 => "Transition",
+            8 => "Transition",
+            9 => "Transition",
+            10 => "Transition",
+            11 => "Transition",
+            12 => "Transition",
+            13 => "Transition",
+            14 => "Transition",
+            15 => "Transition",
+            16 => "Transition",
+            17 => "Transition",
+            18 => "Transition",
+            19 => "Transition",
+            20 => "Transition",
+            21 => "Transition",
+            22 => "Retry",
+            23 => "Retry",
+            24 => "Retry",
+            25 => "Retry",
+            26 => "Retry",
+            27 => "SelectiveHydration",
+            28 => "IdleHydration",
+            29 => "Idle",
+            30 => "Offscreen",
+          },
+          "laneToReactMeasureMap": Map {
+            0 => Array [],
+            1 => Array [],
+            2 => Array [],
+            3 => Array [],
+            4 => Array [],
+            5 => Array [],
+            6 => Array [],
+            7 => Array [],
+            8 => Array [],
+            9 => Array [
+              Object {
+                "batchUID": 0,
+                "depth": 0,
+                "duration": 0.004999999999999999,
+                "lanes": Array [
+                  9,
+                ],
+                "timestamp": 0.006,
+                "type": "render-idle",
+              },
+              Object {
+                "batchUID": 0,
+                "depth": 0,
+                "duration": 0.001,
+                "lanes": Array [
+                  9,
+                ],
+                "timestamp": 0.006,
+                "type": "render",
+              },
+              Object {
+                "batchUID": 0,
+                "depth": 0,
+                "duration": 0.002999999999999999,
+                "lanes": Array [
+                  9,
+                ],
+                "timestamp": 0.008,
+                "type": "commit",
+              },
+              Object {
+                "batchUID": 0,
+                "depth": 1,
+                "duration": 0.0010000000000000009,
+                "lanes": Array [
+                  9,
+                ],
+                "timestamp": 0.009,
+                "type": "layout-effects",
+              },
+            ],
+            10 => Array [],
+            11 => Array [],
+            12 => Array [],
+            13 => Array [],
+            14 => Array [],
+            15 => Array [],
+            16 => Array [],
+            17 => Array [],
+            18 => Array [],
+            19 => Array [],
+            20 => Array [],
+            21 => Array [],
+            22 => Array [],
+            23 => Array [],
+            24 => Array [],
+            25 => Array [],
+            26 => Array [],
+            27 => Array [],
+            28 => Array [],
+            29 => Array [],
+            30 => Array [],
+          },
+          "nativeEvents": Array [],
+          "networkMeasures": Array [],
+          "otherUserTimingMarks": Array [],
+          "reactVersion": "17.0.3",
+          "schedulingEvents": Array [
+            Object {
+              "lanes": Array [
+                9,
+              ],
+              "timestamp": 0.005,
+              "type": "schedule-render",
+              "warning": null,
+            },
+          ],
+          "snapshots": Array [],
+          "startTime": 1,
+          "suspenseEvents": Array [],
+          "thrownErrors": Array [],
+        }
+      `);
     }
   });
 
-  it('should process a sample legacy render sequence', () => {
+  it('should process a sample legacy render sequence', async () => {
     ReactDOM.render(<div />, document.createElement('div'));
 
     if (gate(flags => flags.enableSchedulingProfiler)) {
-      const data = preprocessData([
+      const data = await preprocessData([
         ...createBoilerplateEntries(),
         ...createUserTimingData(clearedMarks),
       ]);
       expect(data).toMatchInlineSnapshot(`
+        Object {
+          "batchUIDToMeasuresMap": Map {
+            0 => Array [
               Object {
-                "componentMeasures": Array [],
-                "duration": 0.013,
-                "flamechart": Array [],
-                "laneToLabelMap": Map {
-                  0 => "Sync",
-                  1 => "InputContinuousHydration",
-                  2 => "InputContinuous",
-                  3 => "DefaultHydration",
-                  4 => "Default",
-                  5 => "TransitionHydration",
-                  6 => "Transition",
-                  7 => "Transition",
-                  8 => "Transition",
-                  9 => "Transition",
-                  10 => "Transition",
-                  11 => "Transition",
-                  12 => "Transition",
-                  13 => "Transition",
-                  14 => "Transition",
-                  15 => "Transition",
-                  16 => "Transition",
-                  17 => "Transition",
-                  18 => "Transition",
-                  19 => "Transition",
-                  20 => "Transition",
-                  21 => "Transition",
-                  22 => "Retry",
-                  23 => "Retry",
-                  24 => "Retry",
-                  25 => "Retry",
-                  26 => "Retry",
-                  27 => "SelectiveHydration",
-                  28 => "IdleHydration",
-                  29 => "Idle",
-                  30 => "Offscreen",
-                },
-                "measures": Array [
-                  Object {
-                    "batchUID": 0,
-                    "depth": 0,
-                    "duration": 0.008,
-                    "lanes": Array [
-                      0,
-                    ],
-                    "timestamp": 0.005,
-                    "type": "render-idle",
-                  },
-                  Object {
-                    "batchUID": 0,
-                    "depth": 0,
-                    "duration": 0.001,
-                    "lanes": Array [
-                      0,
-                    ],
-                    "timestamp": 0.005,
-                    "type": "render",
-                  },
-                  Object {
-                    "batchUID": 0,
-                    "depth": 0,
-                    "duration": 0.005999999999999999,
-                    "lanes": Array [
-                      0,
-                    ],
-                    "timestamp": 0.007,
-                    "type": "commit",
-                  },
-                  Object {
-                    "batchUID": 0,
-                    "depth": 1,
-                    "duration": 0.0010000000000000009,
-                    "lanes": Array [
-                      0,
-                    ],
-                    "timestamp": 0.011,
-                    "type": "layout-effects",
-                  },
+                "batchUID": 0,
+                "depth": 0,
+                "duration": 0.008,
+                "lanes": Array [
+                  0,
                 ],
-                "nativeEvents": Array [],
-                "otherUserTimingMarks": Array [
-                  Object {
-                    "name": "__v3",
-                    "timestamp": 0.003,
-                  },
+                "timestamp": 0.005,
+                "type": "render-idle",
+              },
+              Object {
+                "batchUID": 0,
+                "depth": 0,
+                "duration": 0.001,
+                "lanes": Array [
+                  0,
                 ],
-                "reactVersion": "17.0.3",
-                "schedulingEvents": Array [
-                  Object {
-                    "lanes": Array [
-                      0,
-                    ],
-                    "timestamp": 0.004,
-                    "type": "schedule-render",
-                    "warning": null,
-                  },
+                "timestamp": 0.005,
+                "type": "render",
+              },
+              Object {
+                "batchUID": 0,
+                "depth": 0,
+                "duration": 0.005999999999999999,
+                "lanes": Array [
+                  0,
                 ],
-                "startTime": 4,
-                "suspenseEvents": Array [],
-              }
-          `);
+                "timestamp": 0.007,
+                "type": "commit",
+              },
+              Object {
+                "batchUID": 0,
+                "depth": 1,
+                "duration": 0.0010000000000000009,
+                "lanes": Array [
+                  0,
+                ],
+                "timestamp": 0.011,
+                "type": "layout-effects",
+              },
+            ],
+          },
+          "componentMeasures": Array [],
+          "duration": 0.013,
+          "flamechart": Array [],
+          "laneToLabelMap": Map {
+            0 => "Sync",
+            1 => "InputContinuousHydration",
+            2 => "InputContinuous",
+            3 => "DefaultHydration",
+            4 => "Default",
+            5 => "TransitionHydration",
+            6 => "Transition",
+            7 => "Transition",
+            8 => "Transition",
+            9 => "Transition",
+            10 => "Transition",
+            11 => "Transition",
+            12 => "Transition",
+            13 => "Transition",
+            14 => "Transition",
+            15 => "Transition",
+            16 => "Transition",
+            17 => "Transition",
+            18 => "Transition",
+            19 => "Transition",
+            20 => "Transition",
+            21 => "Transition",
+            22 => "Retry",
+            23 => "Retry",
+            24 => "Retry",
+            25 => "Retry",
+            26 => "Retry",
+            27 => "SelectiveHydration",
+            28 => "IdleHydration",
+            29 => "Idle",
+            30 => "Offscreen",
+          },
+          "laneToReactMeasureMap": Map {
+            0 => Array [
+              Object {
+                "batchUID": 0,
+                "depth": 0,
+                "duration": 0.008,
+                "lanes": Array [
+                  0,
+                ],
+                "timestamp": 0.005,
+                "type": "render-idle",
+              },
+              Object {
+                "batchUID": 0,
+                "depth": 0,
+                "duration": 0.001,
+                "lanes": Array [
+                  0,
+                ],
+                "timestamp": 0.005,
+                "type": "render",
+              },
+              Object {
+                "batchUID": 0,
+                "depth": 0,
+                "duration": 0.005999999999999999,
+                "lanes": Array [
+                  0,
+                ],
+                "timestamp": 0.007,
+                "type": "commit",
+              },
+              Object {
+                "batchUID": 0,
+                "depth": 1,
+                "duration": 0.0010000000000000009,
+                "lanes": Array [
+                  0,
+                ],
+                "timestamp": 0.011,
+                "type": "layout-effects",
+              },
+            ],
+            1 => Array [],
+            2 => Array [],
+            3 => Array [],
+            4 => Array [],
+            5 => Array [],
+            6 => Array [],
+            7 => Array [],
+            8 => Array [],
+            9 => Array [],
+            10 => Array [],
+            11 => Array [],
+            12 => Array [],
+            13 => Array [],
+            14 => Array [],
+            15 => Array [],
+            16 => Array [],
+            17 => Array [],
+            18 => Array [],
+            19 => Array [],
+            20 => Array [],
+            21 => Array [],
+            22 => Array [],
+            23 => Array [],
+            24 => Array [],
+            25 => Array [],
+            26 => Array [],
+            27 => Array [],
+            28 => Array [],
+            29 => Array [],
+            30 => Array [],
+          },
+          "nativeEvents": Array [],
+          "networkMeasures": Array [],
+          "otherUserTimingMarks": Array [
+            Object {
+              "name": "__v3",
+              "timestamp": 0.003,
+            },
+          ],
+          "reactVersion": "17.0.3",
+          "schedulingEvents": Array [
+            Object {
+              "lanes": Array [
+                0,
+              ],
+              "timestamp": 0.004,
+              "type": "schedule-render",
+              "warning": null,
+            },
+          ],
+          "snapshots": Array [],
+          "startTime": 4,
+          "suspenseEvents": Array [],
+          "thrownErrors": Array [],
+        }
+      `);
     }
   });
 
-  it('should process a sample createRoot render sequence', () => {
+  it('should process a sample createRoot render sequence', async () => {
     function App() {
       const [didMount, setDidMount] = React.useState(false);
       React.useEffect(() => {
@@ -567,199 +784,340 @@ describe(preprocessData, () => {
       const root = ReactDOM.createRoot(document.createElement('div'));
       act(() => root.render(<App />));
 
-      const data = preprocessData([
+      const data = await preprocessData([
         ...createBoilerplateEntries(),
         ...createUserTimingData(clearedMarks),
       ]);
       expect(data).toMatchInlineSnapshot(`
+        Object {
+          "batchUIDToMeasuresMap": Map {
+            0 => Array [
               Object {
-                "componentMeasures": Array [
-                  Object {
-                    "componentName": "App",
-                    "duration": 0.001,
-                    "timestamp": 0.006,
-                    "warning": null,
-                  },
-                  Object {
-                    "componentName": "App",
-                    "duration": 0.0010000000000000009,
-                    "timestamp": 0.02,
-                    "warning": null,
-                  },
+                "batchUID": 0,
+                "depth": 0,
+                "duration": 0.009999999999999998,
+                "lanes": Array [
+                  4,
                 ],
-                "duration": 0.031,
-                "flamechart": Array [],
-                "laneToLabelMap": Map {
-                  0 => "Sync",
-                  1 => "InputContinuousHydration",
-                  2 => "InputContinuous",
-                  3 => "DefaultHydration",
-                  4 => "Default",
-                  5 => "TransitionHydration",
-                  6 => "Transition",
-                  7 => "Transition",
-                  8 => "Transition",
-                  9 => "Transition",
-                  10 => "Transition",
-                  11 => "Transition",
-                  12 => "Transition",
-                  13 => "Transition",
-                  14 => "Transition",
-                  15 => "Transition",
-                  16 => "Transition",
-                  17 => "Transition",
-                  18 => "Transition",
-                  19 => "Transition",
-                  20 => "Transition",
-                  21 => "Transition",
-                  22 => "Retry",
-                  23 => "Retry",
-                  24 => "Retry",
-                  25 => "Retry",
-                  26 => "Retry",
-                  27 => "SelectiveHydration",
-                  28 => "IdleHydration",
-                  29 => "Idle",
-                  30 => "Offscreen",
-                },
-                "measures": Array [
-                  Object {
-                    "batchUID": 0,
-                    "depth": 0,
-                    "duration": 0.009999999999999998,
-                    "lanes": Array [
-                      4,
-                    ],
-                    "timestamp": 0.005,
-                    "type": "render-idle",
-                  },
-                  Object {
-                    "batchUID": 0,
-                    "depth": 0,
-                    "duration": 0.003,
-                    "lanes": Array [
-                      4,
-                    ],
-                    "timestamp": 0.005,
-                    "type": "render",
-                  },
-                  Object {
-                    "batchUID": 0,
-                    "depth": 0,
-                    "duration": 0.006,
-                    "lanes": Array [
-                      4,
-                    ],
-                    "timestamp": 0.009,
-                    "type": "commit",
-                  },
-                  Object {
-                    "batchUID": 0,
-                    "depth": 1,
-                    "duration": 0.0010000000000000009,
-                    "lanes": Array [
-                      4,
-                    ],
-                    "timestamp": 0.013,
-                    "type": "layout-effects",
-                  },
-                  Object {
-                    "batchUID": 0,
-                    "depth": 0,
-                    "duration": 0.0019999999999999983,
-                    "lanes": Array [
-                      4,
-                    ],
-                    "timestamp": 0.016,
-                    "type": "passive-effects",
-                  },
-                  Object {
-                    "batchUID": 1,
-                    "depth": 0,
-                    "duration": 0.010000000000000002,
-                    "lanes": Array [
-                      4,
-                    ],
-                    "timestamp": 0.019,
-                    "type": "render-idle",
-                  },
-                  Object {
-                    "batchUID": 1,
-                    "depth": 0,
-                    "duration": 0.002999999999999999,
-                    "lanes": Array [
-                      4,
-                    ],
-                    "timestamp": 0.019,
-                    "type": "render",
-                  },
-                  Object {
-                    "batchUID": 1,
-                    "depth": 0,
-                    "duration": 0.006000000000000002,
-                    "lanes": Array [
-                      4,
-                    ],
-                    "timestamp": 0.023,
-                    "type": "commit",
-                  },
-                  Object {
-                    "batchUID": 1,
-                    "depth": 1,
-                    "duration": 0.0010000000000000009,
-                    "lanes": Array [
-                      4,
-                    ],
-                    "timestamp": 0.027,
-                    "type": "layout-effects",
-                  },
-                  Object {
-                    "batchUID": 1,
-                    "depth": 0,
-                    "duration": 0.0010000000000000009,
-                    "lanes": Array [
-                      4,
-                    ],
-                    "timestamp": 0.03,
-                    "type": "passive-effects",
-                  },
+                "timestamp": 0.005,
+                "type": "render-idle",
+              },
+              Object {
+                "batchUID": 0,
+                "depth": 0,
+                "duration": 0.003,
+                "lanes": Array [
+                  4,
                 ],
-                "nativeEvents": Array [],
-                "otherUserTimingMarks": Array [
-                  Object {
-                    "name": "__v3",
-                    "timestamp": 0.003,
-                  },
+                "timestamp": 0.005,
+                "type": "render",
+              },
+              Object {
+                "batchUID": 0,
+                "depth": 0,
+                "duration": 0.006,
+                "lanes": Array [
+                  4,
                 ],
-                "reactVersion": "17.0.3",
-                "schedulingEvents": Array [
-                  Object {
-                    "lanes": Array [
-                      4,
-                    ],
-                    "timestamp": 0.004,
-                    "type": "schedule-render",
-                    "warning": null,
-                  },
-                  Object {
-                    "componentName": "App",
-                    "lanes": Array [
-                      4,
-                    ],
-                    "timestamp": 0.017,
-                    "type": "schedule-state-update",
-                    "warning": null,
-                  },
+                "timestamp": 0.009,
+                "type": "commit",
+              },
+              Object {
+                "batchUID": 0,
+                "depth": 1,
+                "duration": 0.0010000000000000009,
+                "lanes": Array [
+                  4,
                 ],
-                "startTime": 4,
-                "suspenseEvents": Array [],
-              }
-          `);
+                "timestamp": 0.013,
+                "type": "layout-effects",
+              },
+              Object {
+                "batchUID": 0,
+                "depth": 0,
+                "duration": 0.0019999999999999983,
+                "lanes": Array [
+                  4,
+                ],
+                "timestamp": 0.016,
+                "type": "passive-effects",
+              },
+            ],
+            1 => Array [
+              Object {
+                "batchUID": 1,
+                "depth": 0,
+                "duration": 0.010000000000000002,
+                "lanes": Array [
+                  4,
+                ],
+                "timestamp": 0.019,
+                "type": "render-idle",
+              },
+              Object {
+                "batchUID": 1,
+                "depth": 0,
+                "duration": 0.002999999999999999,
+                "lanes": Array [
+                  4,
+                ],
+                "timestamp": 0.019,
+                "type": "render",
+              },
+              Object {
+                "batchUID": 1,
+                "depth": 0,
+                "duration": 0.006000000000000002,
+                "lanes": Array [
+                  4,
+                ],
+                "timestamp": 0.023,
+                "type": "commit",
+              },
+              Object {
+                "batchUID": 1,
+                "depth": 1,
+                "duration": 0.0010000000000000009,
+                "lanes": Array [
+                  4,
+                ],
+                "timestamp": 0.027,
+                "type": "layout-effects",
+              },
+              Object {
+                "batchUID": 1,
+                "depth": 0,
+                "duration": 0.0010000000000000009,
+                "lanes": Array [
+                  4,
+                ],
+                "timestamp": 0.03,
+                "type": "passive-effects",
+              },
+            ],
+          },
+          "componentMeasures": Array [
+            Object {
+              "componentName": "App",
+              "duration": 0.001,
+              "timestamp": 0.006,
+              "warning": null,
+            },
+            Object {
+              "componentName": "App",
+              "duration": 0.0010000000000000009,
+              "timestamp": 0.02,
+              "warning": null,
+            },
+          ],
+          "duration": 0.031,
+          "flamechart": Array [],
+          "laneToLabelMap": Map {
+            0 => "Sync",
+            1 => "InputContinuousHydration",
+            2 => "InputContinuous",
+            3 => "DefaultHydration",
+            4 => "Default",
+            5 => "TransitionHydration",
+            6 => "Transition",
+            7 => "Transition",
+            8 => "Transition",
+            9 => "Transition",
+            10 => "Transition",
+            11 => "Transition",
+            12 => "Transition",
+            13 => "Transition",
+            14 => "Transition",
+            15 => "Transition",
+            16 => "Transition",
+            17 => "Transition",
+            18 => "Transition",
+            19 => "Transition",
+            20 => "Transition",
+            21 => "Transition",
+            22 => "Retry",
+            23 => "Retry",
+            24 => "Retry",
+            25 => "Retry",
+            26 => "Retry",
+            27 => "SelectiveHydration",
+            28 => "IdleHydration",
+            29 => "Idle",
+            30 => "Offscreen",
+          },
+          "laneToReactMeasureMap": Map {
+            0 => Array [],
+            1 => Array [],
+            2 => Array [],
+            3 => Array [],
+            4 => Array [
+              Object {
+                "batchUID": 0,
+                "depth": 0,
+                "duration": 0.009999999999999998,
+                "lanes": Array [
+                  4,
+                ],
+                "timestamp": 0.005,
+                "type": "render-idle",
+              },
+              Object {
+                "batchUID": 0,
+                "depth": 0,
+                "duration": 0.003,
+                "lanes": Array [
+                  4,
+                ],
+                "timestamp": 0.005,
+                "type": "render",
+              },
+              Object {
+                "batchUID": 0,
+                "depth": 0,
+                "duration": 0.006,
+                "lanes": Array [
+                  4,
+                ],
+                "timestamp": 0.009,
+                "type": "commit",
+              },
+              Object {
+                "batchUID": 0,
+                "depth": 1,
+                "duration": 0.0010000000000000009,
+                "lanes": Array [
+                  4,
+                ],
+                "timestamp": 0.013,
+                "type": "layout-effects",
+              },
+              Object {
+                "batchUID": 0,
+                "depth": 0,
+                "duration": 0.0019999999999999983,
+                "lanes": Array [
+                  4,
+                ],
+                "timestamp": 0.016,
+                "type": "passive-effects",
+              },
+              Object {
+                "batchUID": 1,
+                "depth": 0,
+                "duration": 0.010000000000000002,
+                "lanes": Array [
+                  4,
+                ],
+                "timestamp": 0.019,
+                "type": "render-idle",
+              },
+              Object {
+                "batchUID": 1,
+                "depth": 0,
+                "duration": 0.002999999999999999,
+                "lanes": Array [
+                  4,
+                ],
+                "timestamp": 0.019,
+                "type": "render",
+              },
+              Object {
+                "batchUID": 1,
+                "depth": 0,
+                "duration": 0.006000000000000002,
+                "lanes": Array [
+                  4,
+                ],
+                "timestamp": 0.023,
+                "type": "commit",
+              },
+              Object {
+                "batchUID": 1,
+                "depth": 1,
+                "duration": 0.0010000000000000009,
+                "lanes": Array [
+                  4,
+                ],
+                "timestamp": 0.027,
+                "type": "layout-effects",
+              },
+              Object {
+                "batchUID": 1,
+                "depth": 0,
+                "duration": 0.0010000000000000009,
+                "lanes": Array [
+                  4,
+                ],
+                "timestamp": 0.03,
+                "type": "passive-effects",
+              },
+            ],
+            5 => Array [],
+            6 => Array [],
+            7 => Array [],
+            8 => Array [],
+            9 => Array [],
+            10 => Array [],
+            11 => Array [],
+            12 => Array [],
+            13 => Array [],
+            14 => Array [],
+            15 => Array [],
+            16 => Array [],
+            17 => Array [],
+            18 => Array [],
+            19 => Array [],
+            20 => Array [],
+            21 => Array [],
+            22 => Array [],
+            23 => Array [],
+            24 => Array [],
+            25 => Array [],
+            26 => Array [],
+            27 => Array [],
+            28 => Array [],
+            29 => Array [],
+            30 => Array [],
+          },
+          "nativeEvents": Array [],
+          "networkMeasures": Array [],
+          "otherUserTimingMarks": Array [
+            Object {
+              "name": "__v3",
+              "timestamp": 0.003,
+            },
+          ],
+          "reactVersion": "17.0.3",
+          "schedulingEvents": Array [
+            Object {
+              "lanes": Array [
+                4,
+              ],
+              "timestamp": 0.004,
+              "type": "schedule-render",
+              "warning": null,
+            },
+            Object {
+              "componentName": "App",
+              "lanes": Array [
+                4,
+              ],
+              "timestamp": 0.017,
+              "type": "schedule-state-update",
+              "warning": null,
+            },
+          ],
+          "snapshots": Array [],
+          "startTime": 4,
+          "suspenseEvents": Array [],
+          "thrownErrors": Array [],
+        }
+      `);
     }
   });
 
   // @gate enableSchedulingProfiler
-  it('should error if events and measures are incomplete', () => {
+  it('should error if events and measures are incomplete', async () => {
     const container = document.createElement('div');
     ReactDOM.render(<div />, container);
 
@@ -774,7 +1132,7 @@ describe(preprocessData, () => {
   });
 
   // @gate enableSchedulingProfiler
-  it('should error if work is completed without being started', () => {
+  it('should error if work is completed without being started', async () => {
     const container = document.createElement('div');
     ReactDOM.render(<div />, container);
 
@@ -788,7 +1146,7 @@ describe(preprocessData, () => {
     expect(error).toHaveBeenCalled();
   });
 
-  it('should populate other user timing marks', () => {
+  it('should populate other user timing marks', async () => {
     const userTimingData = createUserTimingData([]);
     userTimingData.push(
       createUserTimingEntry({
@@ -815,7 +1173,7 @@ describe(preprocessData, () => {
       }),
     );
 
-    const data = preprocessData([
+    const data = await preprocessData([
       ...createBoilerplateEntries(),
       ...userTimingData,
     ]);
@@ -837,9 +1195,49 @@ describe(preprocessData, () => {
     `);
   });
 
+  it('should include a suspended resource "displayName" if one is set', async () => {
+    let promise = null;
+    let resolvedValue = null;
+    function readValue(value) {
+      if (resolvedValue !== null) {
+        return resolvedValue;
+      } else if (promise === null) {
+        promise = Promise.resolve(true).then(() => {
+          resolvedValue = value;
+        });
+        promise.displayName = 'Testing displayName';
+      }
+      throw promise;
+    }
+
+    function Component() {
+      const value = readValue(123);
+      return value;
+    }
+
+    if (gate(flags => flags.enableSchedulingProfiler)) {
+      const testMarks = [creactCpuProfilerSample()];
+
+      const root = ReactDOM.createRoot(document.createElement('div'));
+      act(() =>
+        root.render(
+          <React.Suspense fallback="Loading...">
+            <Component />
+          </React.Suspense>,
+        ),
+      );
+
+      testMarks.push(...createUserTimingData(clearedMarks));
+
+      const data = await preprocessData(testMarks);
+      expect(data.suspenseEvents).toHaveLength(1);
+      expect(data.suspenseEvents[0].promiseName).toBe('Testing displayName');
+    }
+  });
+
   describe('warnings', () => {
     describe('long event handlers', () => {
-      it('should not warn when React scedules a (sync) update inside of a short event handler', () => {
+      it('should not warn when React scedules a (sync) update inside of a short event handler', async () => {
         function App() {
           return null;
         }
@@ -857,13 +1255,13 @@ describe(preprocessData, () => {
 
           testMarks.push(...createUserTimingData(clearedMarks));
 
-          const data = preprocessData(testMarks);
+          const data = await preprocessData(testMarks);
           const event = data.nativeEvents.find(({type}) => type === 'click');
           expect(event.warning).toBe(null);
         }
       });
 
-      it('should not warn about long events if the cause was non-React JavaScript', () => {
+      it('should not warn about long events if the cause was non-React JavaScript', async () => {
         function App() {
           return null;
         }
@@ -883,13 +1281,13 @@ describe(preprocessData, () => {
 
           testMarks.push(...createUserTimingData(clearedMarks));
 
-          const data = preprocessData(testMarks);
+          const data = await preprocessData(testMarks);
           const event = data.nativeEvents.find(({type}) => type === 'click');
           expect(event.warning).toBe(null);
         }
       });
 
-      it('should warn when React scedules a long (sync) update inside of an event', () => {
+      it('should warn when React scedules a long (sync) update inside of an event', async () => {
         function App() {
           return null;
         }
@@ -922,7 +1320,7 @@ describe(preprocessData, () => {
             });
           });
 
-          const data = preprocessData(testMarks);
+          const data = await preprocessData(testMarks);
           const event = data.nativeEvents.find(({type}) => type === 'click');
           expect(event.warning).toMatchInlineSnapshot(
             `"An event handler scheduled a big update with React. Consider using the Transition API to defer some of this work."`,
@@ -930,7 +1328,7 @@ describe(preprocessData, () => {
         }
       });
 
-      it('should not warn when React finishes a previously long (async) update with a short (sync) update inside of an event', () => {
+      it('should not warn when React finishes a previously long (async) update with a short (sync) update inside of an event', async () => {
         function Yield({id, value}) {
           Scheduler.unstable_yieldValue(`${id}:${value}`);
           return null;
@@ -980,7 +1378,7 @@ describe(preprocessData, () => {
 
           testMarks.push(...createUserTimingData(clearedMarks));
 
-          const data = preprocessData(testMarks);
+          const data = await preprocessData(testMarks);
           const event = data.nativeEvents.find(({type}) => type === 'click');
           expect(event.warning).toBe(null);
         }
@@ -988,7 +1386,7 @@ describe(preprocessData, () => {
     });
 
     describe('nested updates', () => {
-      it('should not warn about short nested (state) updates during layout effects', () => {
+      it('should not warn about short nested (state) updates during layout effects', async () => {
         function Component() {
           const [didMount, setDidMount] = React.useState(false);
           Scheduler.unstable_yieldValue(
@@ -1011,7 +1409,7 @@ describe(preprocessData, () => {
             'Component update',
           ]);
 
-          const data = preprocessData([
+          const data = await preprocessData([
             ...createBoilerplateEntries(),
             ...createUserTimingData(clearedMarks),
           ]);
@@ -1023,7 +1421,7 @@ describe(preprocessData, () => {
         }
       });
 
-      it('should not warn about short (forced) updates during layout effects', () => {
+      it('should not warn about short (forced) updates during layout effects', async () => {
         class Component extends React.Component {
           _didMount: boolean = false;
           componentDidMount() {
@@ -1049,7 +1447,7 @@ describe(preprocessData, () => {
             'Component update',
           ]);
 
-          const data = preprocessData([
+          const data = await preprocessData([
             ...createBoilerplateEntries(),
             ...createUserTimingData(clearedMarks),
           ]);
@@ -1061,7 +1459,7 @@ describe(preprocessData, () => {
         }
       });
 
-      it('should warn about long nested (state) updates during layout effects', () => {
+      it('should warn about long nested (state) updates during layout effects', async () => {
         function Component() {
           const [didMount, setDidMount] = React.useState(false);
           Scheduler.unstable_yieldValue(
@@ -1106,7 +1504,7 @@ describe(preprocessData, () => {
             });
           });
 
-          const data = preprocessData([
+          const data = await preprocessData([
             cpuProfilerSample,
             ...createBoilerplateEntries(),
             ...testMarks,
@@ -1121,7 +1519,7 @@ describe(preprocessData, () => {
         }
       });
 
-      it('should warn about long nested (forced) updates during layout effects', () => {
+      it('should warn about long nested (forced) updates during layout effects', async () => {
         class Component extends React.Component {
           _didMount: boolean = false;
           componentDidMount() {
@@ -1167,7 +1565,7 @@ describe(preprocessData, () => {
             });
           });
 
-          const data = preprocessData([
+          const data = await preprocessData([
             cpuProfilerSample,
             ...createBoilerplateEntries(),
             ...testMarks,
@@ -1183,10 +1581,56 @@ describe(preprocessData, () => {
       });
     });
 
+    describe('errors thrown while rendering', () => {
+      it('shoult parse Errors thrown during render', async () => {
+        spyOnDev(console, 'error');
+        spyOnProd(console, 'error');
+
+        class ErrorBoundary extends React.Component {
+          state = {error: null};
+          componentDidCatch(error) {
+            this.setState({error});
+          }
+          render() {
+            if (this.state.error) {
+              return null;
+            }
+            return this.props.children;
+          }
+        }
+
+        function ExampleThatThrows() {
+          throw Error('Expected error');
+        }
+
+        if (gate(flags => flags.enableSchedulingProfiler)) {
+          const testMarks = [creactCpuProfilerSample()];
+
+          // Mount and commit the app
+          const root = ReactDOM.createRoot(document.createElement('div'));
+          act(() =>
+            root.render(
+              <ErrorBoundary>
+                <ExampleThatThrows />
+              </ErrorBoundary>,
+            ),
+          );
+
+          testMarks.push(...createUserTimingData(clearedMarks));
+
+          const data = await preprocessData(testMarks);
+          expect(data.thrownErrors).toHaveLength(2);
+          expect(data.thrownErrors[0].message).toMatchInlineSnapshot(
+            '"Expected error"',
+          );
+        }
+      });
+    });
+
     describe('suspend during an update', () => {
       // This also tests an edge case where the a component suspends while profiling
       // before the first commit is logged (so the lane-to-labels map will not yet exist).
-      it('should warn about suspending during an udpate', () => {
+      it('should warn about suspending during an udpate', async () => {
         let promise = null;
         let resolvedValue = null;
         function readValue(value) {
@@ -1234,7 +1678,7 @@ describe(preprocessData, () => {
 
           testMarks.push(...createUserTimingData(clearedMarks));
 
-          const data = preprocessData(testMarks);
+          const data = await preprocessData(testMarks);
           expect(data.suspenseEvents).toHaveLength(1);
           expect(data.suspenseEvents[0].warning).toMatchInlineSnapshot(
             `"A component suspended during an update which caused a fallback to be shown. Consider using the Transition API to avoid hiding components after they've been mounted."`,
@@ -1292,13 +1736,15 @@ describe(preprocessData, () => {
 
           testMarks.push(...createUserTimingData(clearedMarks));
 
-          const data = preprocessData(testMarks);
+          const data = await preprocessData(testMarks);
           expect(data.suspenseEvents).toHaveLength(1);
           expect(data.suspenseEvents[0].warning).toBe(null);
         }
       });
     });
   });
+
+  // TODO: Add test for snapshot base64 parsing
 
   // TODO: Add test for flamechart parsing
 });

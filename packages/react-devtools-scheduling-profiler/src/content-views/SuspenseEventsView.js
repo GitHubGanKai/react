@@ -80,6 +80,7 @@ export class SuspenseEventsView extends View {
     this._intrinsicSize = {
       width: duration,
       height: (this._maxDepth + 1) * ROW_WITH_BORDER_HEIGHT,
+      hideScrollBarIfLessThanHeight: ROW_WITH_BORDER_HEIGHT,
       maxInitialHeight: ROW_WITH_BORDER_HEIGHT * MAX_ROWS_TO_SHOW_INITIALLY,
     };
   }
@@ -113,6 +114,7 @@ export class SuspenseEventsView extends View {
       depth,
       duration,
       phase,
+      promiseName,
       resolution,
       timestamp,
       warning,
@@ -168,18 +170,6 @@ export class SuspenseEventsView extends View {
         return; // Not in view
       }
 
-      const drawableRect = intersectionOfRects(suspenseRect, rect);
-
-      // Clip diamonds so they don't overflow if the view has been resized (smaller).
-      const region = new Path2D();
-      region.rect(
-        drawableRect.origin.x,
-        drawableRect.origin.y,
-        drawableRect.size.width,
-        drawableRect.size.height,
-      );
-      context.save();
-      context.clip(region);
       context.beginPath();
       context.fillStyle = fillStyle;
       context.moveTo(xStart, y - halfSize);
@@ -187,7 +177,6 @@ export class SuspenseEventsView extends View {
       context.lineTo(xStart, y + halfSize);
       context.lineTo(xStart - halfSize, y);
       context.fill();
-      context.restore();
     } else {
       const xStop = timestampToPosition(
         timestamp + duration,
@@ -221,7 +210,9 @@ export class SuspenseEventsView extends View {
       );
 
       let label = 'suspended';
-      if (componentName != null) {
+      if (promiseName != null) {
+        label = promiseName;
+      } else if (componentName != null) {
         label = `${componentName} ${label}`;
       }
       if (phase !== null) {
@@ -285,7 +276,7 @@ export class SuspenseEventsView extends View {
           borderFrame,
           visibleArea,
         );
-        context.fillStyle = COLORS.PRIORITY_BORDER;
+        context.fillStyle = COLORS.REACT_WORK_BORDER;
         context.fillRect(
           borderDrawableRect.origin.x,
           borderDrawableRect.origin.y,
