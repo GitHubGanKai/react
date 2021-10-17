@@ -1,10 +1,19 @@
-/* global chrome */
+// @flow strict-local
 
 'use strict';
 
-const ports = {};
+declare var chrome: any;
+
+const ports: {
+  [tab: string]: {|devtools: any, 'content-script': any|},
+} = {};
 
 const IS_FIREFOX = navigator.userAgent.indexOf('Firefox') >= 0;
+
+import {
+  EXTENSION_INSTALL_CHECK,
+  SHOW_DUPLICATE_EXTENSION_WARNING,
+} from './constants';
 
 chrome.runtime.onConnect.addListener(function(port) {
   let tab = null;
@@ -115,6 +124,15 @@ chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
     checkAndHandleRestrictedPageIfSo(tab);
   }
 });
+
+chrome.runtime.onMessageExternal.addListener(
+  (request, sender, sendResponse) => {
+    if (request === EXTENSION_INSTALL_CHECK) {
+      sendResponse(true);
+      chrome.runtime.sendMessage(SHOW_DUPLICATE_EXTENSION_WARNING);
+    }
+  },
+);
 
 chrome.runtime.onMessage.addListener((request, sender) => {
   const tab = sender.tab;
