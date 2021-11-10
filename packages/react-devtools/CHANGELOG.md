@@ -2,6 +2,35 @@
 
 <!-- RELEASE_SCRIPT_TOKEN -->
 
+## 4.21.0 (October 31, 2021)
+
+#### Features
+* Scheduling Profiler: Add marks for component effects (mount and unmount) ([@bvaughn](https://github.com/bvaughn) in [#22578](https://github.com/facebook/react/pull/22578))
+* Scheduling Profiler: De-emphasize React internal frames ([bvaughn](https://github.com/bvaughn) in [#22588](https://github.com/facebook/react/pull/22588))
+
+
+#### Bugfix
+* Revert logic for checking for duplicate installations of DevTools potentially causing issues loading Components tab ([@jstejada](https://github.com/jstejada) in [#22638](https://github.com/facebook/react/pull/22638))
+* Scheduling Profiler does not warn about long transitions ([@bvaughn](https://github.com/bvaughn) in [#22614](https://github.com/facebook/react/pull/22614))
+* Re-enable 'Reload and Start Profiling' for Microsoft Edge ([@eoandersson](https://github.com/eoandersson) in [#22631](https://github.com/facebook/react/pull/22631))
+
+
+#### Misc
+* DevTools supports ENV-injected version for better internal bug reports ([@bvaughn](https://github.com/bvaughn) in [#22635](https://github.com/facebook/react/pull/22635))
+* Fix typos ([@KonstHardy](https://github.com/KonstHardy) in [#22494](https://github.com/facebook/react/pull/22494))
+
+## 4.20.2 (October 20, 2021)
+
+#### Bugfix
+* Dev Tools: Relax constraint on passing extensionId for backend init ([@jstejada](https://github.com/jstejada) in [#22597](https://github.com/facebook/react/pull/22597))
+* DevTools: Fix passing extensionId in evaled postMessage calls ([@jstejada](https://github.com/jstejada) in [#22590](https://github.com/facebook/react/pull/22590))
+
+## 4.20.1 (October 19, 2021)
+
+#### Bugfix
+* Only show DevTools warning about unrecognized build in Chrome ([@jstejada](https://github.com/jstejada) in [#22571](https://github.com/facebook/react/pull/22571))
+* DevTools: Include Edge in browser name detection ([@jstejada](https://github.com/jstejada) in [#22584](https://github.com/facebook/react/pull/22584))
+
 ## 4.20.0 (October 15, 2021)
 
 #### Features
