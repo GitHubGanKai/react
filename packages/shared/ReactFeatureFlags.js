@@ -103,7 +103,7 @@ export const warnOnSubscriptionInsideStartTransition = false;
 
 export const enableSuspenseAvoidThisFallback = false;
 
-export const enableCapturePhaseSelectiveHydrationWithoutDiscreteEventReplay = false;
+export const enableCapturePhaseSelectiveHydrationWithoutDiscreteEventReplay = true;
 
 export const enableClientRenderFallbackOnHydrationMismatch = true;
 
@@ -173,8 +173,6 @@ export const deferRenderPhaseUpdateToNextBatch = false;
 export const enableUseRefAccessWarning = false;
 
 export const warnAboutCallbackRefReturningFunction = false;
-
-export const enableRecursiveCommitTraversal = false;
 
 export const disableSchedulerTimeoutInWorkLoop = false;
 
