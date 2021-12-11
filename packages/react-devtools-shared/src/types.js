@@ -91,3 +91,14 @@ export type LRUCache<K, V> = {|
   reset: () => void,
   set: (key: K, value: V) => void,
 |};
+
+export type StyleXPlugin = {|
+  sources: Array<string>,
+  resolvedStyles: Object,
+|};
+
+export type Plugins = {|
+  stylex: StyleXPlugin | null,
+|};
+
+export const StrictMode = 1;
