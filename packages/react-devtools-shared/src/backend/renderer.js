@@ -24,6 +24,7 @@ import {
   ElementTypeRoot,
   ElementTypeSuspense,
   ElementTypeSuspenseList,
+  ElementTypeTracingMarker,
   StrictMode,
 } from 'react-devtools-shared/src/types';
 import {
@@ -47,6 +48,8 @@ import {
 } from './utils';
 import {
   __DEBUG__,
+  PROFILING_FLAG_BASIC_SUPPORT,
+  PROFILING_FLAG_TIMELINE_SUPPORT,
   SESSION_STORAGE_RELOAD_AND_PROFILE_KEY,
   SESSION_STORAGE_RECORD_CHANGE_DESCRIPTIONS_KEY,
   TREE_OPERATION_ADD,
@@ -82,6 +85,7 @@ import {
   FORWARD_REF_SYMBOL_STRING,
   MEMO_NUMBER,
   MEMO_SYMBOL_STRING,
+  SERVER_CONTEXT_SYMBOL_STRING,
 } from './ReactSymbols';
 import {format} from './utils';
 import {
@@ -92,7 +96,9 @@ import is from 'shared/objectIs';
 import isArray from 'shared/isArray';
 import hasOwnProperty from 'shared/hasOwnProperty';
 import {getStyleXData} from './StyleX/utils';
+import {createProfilingHooks} from './profilingHooks';
 
+import type {GetTimelineData, ToggleProfilingStatus} from './profilingHooks';
 import type {Fiber} from 'react-reconciler/src/ReactInternalTypes';
 import type {
   ChangeDescription,
@@ -243,6 +249,8 @@ export function getInternalReactConstants(
       SimpleMemoComponent: 15,
       SuspenseComponent: 13,
       SuspenseListComponent: 19, // Experimental
+      TracingMarkerComponent: 25, // Experimental - This is technically in 18 but we don't
+      // want to fork again so we're adding it here instead
       YieldComponent: -1, // Removed
     };
   } else if (gte(version, '17.0.0-alpha')) {
@@ -273,6 +281,7 @@ export function getInternalReactConstants(
       SimpleMemoComponent: 15,
       SuspenseComponent: 13,
       SuspenseListComponent: 19, // Experimental
+      TracingMarkerComponent: -1, // Doesn't exist yet
       YieldComponent: -1, // Removed
     };
   } else if (gte(version, '16.6.0-beta.0')) {
@@ -303,6 +312,7 @@ export function getInternalReactConstants(
       SimpleMemoComponent: 15,
       SuspenseComponent: 13,
       SuspenseListComponent: 19, // Experimental
+      TracingMarkerComponent: -1, // Doesn't exist yet
       YieldComponent: -1, // Removed
     };
   } else if (gte(version, '16.4.3-alpha')) {
@@ -333,6 +343,7 @@ export function getInternalReactConstants(
       SimpleMemoComponent: -1, // Doesn't exist yet
       SuspenseComponent: 16,
       SuspenseListComponent: -1, // Doesn't exist yet
+      TracingMarkerComponent: -1, // Doesn't exist yet
       YieldComponent: -1, // Removed
     };
   } else {
@@ -363,6 +374,7 @@ export function getInternalReactConstants(
       SimpleMemoComponent: -1, // Doesn't exist yet
       SuspenseComponent: 16,
       SuspenseListComponent: -1, // Doesn't exist yet
+      TracingMarkerComponent: -1, // Doesn't exist yet
       YieldComponent: 9,
     };
   }
@@ -401,6 +413,7 @@ export function getInternalReactConstants(
     SimpleMemoComponent,
     SuspenseComponent,
     SuspenseListComponent,
+    TracingMarkerComponent,
   } = ReactTypeOfWork;
 
   function resolveFiberType(type: any) {
@@ -480,6 +493,8 @@ export function getInternalReactConstants(
         return 'SuspenseList';
       case Profiler:
         return 'Profiler';
+      case TracingMarkerComponent:
+        return 'TracingMarker';
       default:
         const typeSymbol = getTypeSymbol(type);
 
@@ -497,6 +512,7 @@ export function getInternalReactConstants(
             return `${resolvedContext.displayName || 'Context'}.Provider`;
           case CONTEXT_NUMBER:
           case CONTEXT_SYMBOL_STRING:
+          case SERVER_CONTEXT_SYMBOL_STRING:
             // 16.3-16.5 read from "type" because the Consumer is the actual context object.
             // 16.6+ should read from "type._context" because Consumer can be different (in DEV).
             // NOTE Keep in sync with inspectElementRaw()
@@ -531,6 +547,17 @@ export function getInternalReactConstants(
     StrictModeBits,
   };
 }
+
+// Map of one or more Fibers in a pair to their unique id number.
+// We track both Fibers to support Fast Refresh,
+// which may forcefully replace one of the pair as part of hot reloading.
+// In that case it's still important to be able to locate the previous ID during subsequent renders.
+const fiberToIDMap: Map<Fiber, number> = new Map();
+
+// Map of id to one (arbitrary) Fiber in a pair.
+// This Map is used to e.g. get the display name for a Fiber or schedule an update,
+// operations that should be the same whether the current and work-in-progress Fiber is used.
+const idToArbitraryFiberMap: Map<number, Fiber> = new Map();
 
 export function attach(
   hook: DevToolsHook,
@@ -579,6 +606,7 @@ export function attach(
     SimpleMemoComponent,
     SuspenseComponent,
     SuspenseListComponent,
+    TracingMarkerComponent,
   } = ReactTypeOfWork;
   const {
     ImmediatePriority,
@@ -590,6 +618,8 @@ export function attach(
   } = ReactPriorityLevels;
 
   const {
+    getLaneLabelMap,
+    injectProfilingHooks,
     overrideHookState,
     overrideHookStateDeletePath,
     overrideHookStateRenamePath,
@@ -622,6 +652,24 @@ export function attach(
         return scheduleRefresh(...args);
       }
     };
+  }
+
+  let getTimelineData: null | GetTimelineData = null;
+  let toggleProfilingStatus: null | ToggleProfilingStatus = null;
+  if (typeof injectProfilingHooks === 'function') {
+    const response = createProfilingHooks({
+      getDisplayNameForFiber,
+      getIsProfiling: () => isProfiling,
+      getLaneLabelMap,
+      reactVersion: version,
+    });
+
+    // Pass the Profiling hooks to the reconciler for it to call during render.
+    injectProfilingHooks(response.profilingHooks);
+
+    // Hang onto this toggle so we can notify the external methods of profiling status changes.
+    getTimelineData = response.getTimelineData;
+    toggleProfilingStatus = response.toggleProfilingStatus;
   }
 
   // Tracks Fibers with recently changed number of error/warning messages.
@@ -1020,6 +1068,8 @@ export function attach(
         return ElementTypeSuspense;
       case SuspenseListComponent:
         return ElementTypeSuspenseList;
+      case TracingMarkerComponent:
+        return ElementTypeTracingMarker;
       default:
         const typeSymbol = getTypeSymbol(type);
 
@@ -1045,17 +1095,6 @@ export function attach(
         }
     }
   }
-
-  // Map of one or more Fibers in a pair to their unique id number.
-  // We track both Fibers to support Fast Refresh,
-  // which may forcefully replace one of the pair as part of hot reloading.
-  // In that case it's still important to be able to locate the previous ID during subsequent renders.
-  const fiberToIDMap: Map<Fiber, number> = new Map();
-
-  // Map of id to one (arbitrary) Fiber in a pair.
-  // This Map is used to e.g. get the display name for a Fiber or schedule an update,
-  // operations that should be the same whether the current and work-in-progress Fiber is used.
-  const idToArbitraryFiberMap: Map<number, Fiber> = new Map();
 
   // When profiling is supported, we store the latest tree base durations for each Fiber.
   // This is so that we can quickly capture a snapshot of those values if profiling starts.
@@ -1334,11 +1373,19 @@ export function attach(
   // Fibers only store the current context value,
   // so we need to track them separately in order to determine changed keys.
   function crawlToInitializeContextsMap(fiber: Fiber) {
-    updateContextsForFiber(fiber);
-    let current = fiber.child;
-    while (current !== null) {
-      crawlToInitializeContextsMap(current);
-      current = current.sibling;
+    const id = getFiberIDUnsafe(fiber);
+
+    // Not all Fibers in the subtree have mounted yet.
+    // For example, Offscreen (hidden) or Suspense (suspended) subtrees won't yet be tracked.
+    // We can safely skip these subtrees.
+    if (id !== null) {
+      updateContextsForFiber(fiber);
+
+      let current = fiber.child;
+      while (current !== null) {
+        crawlToInitializeContextsMap(current);
+        current = current.sibling;
+      }
     }
   }
 
@@ -1577,18 +1624,27 @@ export function attach(
     pendingOperations.push(op);
   }
 
-  function flushOrQueueOperations(operations: OperationsArray): void {
-    if (operations.length === 3) {
-      // This operations array is a no op: [renderer ID, root ID, string table size (0)]
-      // We can usually skip sending updates like this across the bridge, unless we're Profiling.
-      // In that case, even though the tree didn't change– some Fibers may have still rendered.
+  function shouldBailoutWithPendingOperations() {
+    if (isProfiling) {
       if (
-        !isProfiling ||
-        currentCommitProfilingMetadata == null ||
-        currentCommitProfilingMetadata.durations.length === 0
+        currentCommitProfilingMetadata != null &&
+        currentCommitProfilingMetadata.durations.length > 0
       ) {
-        return;
+        return false;
       }
+    }
+
+    return (
+      pendingOperations.length === 0 &&
+      pendingRealUnmountedIDs.length === 0 &&
+      pendingSimulatedUnmountedIDs.length === 0 &&
+      pendingUnmountedRootID === null
+    );
+  }
+
+  function flushOrQueueOperations(operations: OperationsArray): void {
+    if (shouldBailoutWithPendingOperations()) {
+      return;
     }
 
     if (pendingOperationsQueue !== null) {
@@ -1621,7 +1677,7 @@ export function attach(
 
       recordPendingErrorsAndWarnings();
 
-      if (pendingOperations.length === 0) {
+      if (shouldBailoutWithPendingOperations()) {
         // No warnings or errors to flush; we can bail out early here too.
         return;
       }
@@ -1744,12 +1800,7 @@ export function attach(
     // We do this just before flushing, so we can ignore errors for no-longer-mounted Fibers.
     recordPendingErrorsAndWarnings();
 
-    if (
-      pendingOperations.length === 0 &&
-      pendingRealUnmountedIDs.length === 0 &&
-      pendingSimulatedUnmountedIDs.length === 0 &&
-      pendingUnmountedRootID === null
-    ) {
+    if (shouldBailoutWithPendingOperations()) {
       // If we aren't profiling, we can just bail out here.
       // No use sending an empty update over the bridge.
       //
@@ -1758,9 +1809,7 @@ export function attach(
       // (2) the operations array for each commit
       // Because of this, it's important that the operations and metadata arrays align,
       // So it's important not to omit even empty operations while profiling is active.
-      if (!isProfiling) {
-        return;
-      }
+      return;
     }
 
     const numUnmountIDs =
@@ -1889,12 +1938,22 @@ export function attach(
     const hasOwnerMetadata = fiber.hasOwnProperty('_debugOwner');
     const isProfilingSupported = fiber.hasOwnProperty('treeBaseDuration');
 
+    // Adding a new field here would require a bridge protocol version bump (a backwads breaking change).
+    // Instead let's re-purpose a pre-existing field to carry more information.
+    let profilingFlags = 0;
+    if (isProfilingSupported) {
+      profilingFlags = PROFILING_FLAG_BASIC_SUPPORT;
+      if (typeof injectProfilingHooks === 'function') {
+        profilingFlags |= PROFILING_FLAG_TIMELINE_SUPPORT;
+      }
+    }
+
     if (isRoot) {
       pushOperation(TREE_OPERATION_ADD);
       pushOperation(id);
       pushOperation(ElementTypeRoot);
       pushOperation((fiber.mode & StrictModeBits) !== 0 ? 1 : 0);
-      pushOperation(isProfilingSupported ? 1 : 0);
+      pushOperation(profilingFlags);
       pushOperation(StrictModeBits !== 0 ? 1 : 0);
       pushOperation(hasOwnerMetadata ? 1 : 0);
 
@@ -2573,7 +2632,9 @@ export function attach(
 
   function getUpdatersList(root): Array<SerializedElement> | null {
     return root.memoizedUpdaters != null
-      ? Array.from(root.memoizedUpdaters).map(fiberToSerializedElement)
+      ? Array.from(root.memoizedUpdaters)
+          .filter(fiber => getFiberIDUnsafe(fiber) !== null)
+          .map(fiberToSerializedElement)
       : null;
   }
 
@@ -2665,12 +2726,7 @@ export function attach(
     }
 
     if (isProfiling && isProfilingSupported) {
-      // Make sure at least one Fiber performed work during this commit.
-      // If not, don't send it to the frontend; showing an empty commit in the Profiler is confusing.
-      if (
-        currentCommitProfilingMetadata != null &&
-        currentCommitProfilingMetadata.durations.length > 0
-      ) {
+      if (!shouldBailoutWithPendingOperations()) {
         const commitProfilingMetadata = ((rootToCommitProfilingMetadataMap: any): CommitProfilingMetadataMap).get(
           currentRootID,
         );
@@ -3936,9 +3992,43 @@ export function attach(
       },
     );
 
+    let timelineData = null;
+    if (typeof getTimelineData === 'function') {
+      const currentTimelineData = getTimelineData();
+      if (currentTimelineData) {
+        const {
+          batchUIDToMeasuresMap,
+          internalModuleSourceToRanges,
+          laneToLabelMap,
+          laneToReactMeasureMap,
+          ...rest
+        } = currentTimelineData;
+
+        timelineData = {
+          ...rest,
+
+          // Most of the data is safe to parse as-is,
+          // but we need to convert the nested Arrays back to Maps.
+          // Most of the data is safe to serialize as-is,
+          // but we need to convert the Maps to nested Arrays.
+          batchUIDToMeasuresKeyValueArray: Array.from(
+            batchUIDToMeasuresMap.entries(),
+          ),
+          internalModuleSourceToRanges: Array.from(
+            internalModuleSourceToRanges.entries(),
+          ),
+          laneToLabelKeyValueArray: Array.from(laneToLabelMap.entries()),
+          laneToReactMeasureKeyValueArray: Array.from(
+            laneToReactMeasureMap.entries(),
+          ),
+        };
+      }
+    }
+
     return {
       dataForRoots,
       rendererID,
+      timelineData,
     };
   }
 
@@ -3976,11 +4066,19 @@ export function attach(
     isProfiling = true;
     profilingStartTime = getCurrentTime();
     rootToCommitProfilingMetadataMap = new Map();
+
+    if (toggleProfilingStatus !== null) {
+      toggleProfilingStatus(true);
+    }
   }
 
   function stopProfiling() {
     isProfiling = false;
     recordChangeDescriptions = false;
+
+    if (toggleProfilingStatus !== null) {
+      toggleProfilingStatus(false);
+    }
   }
 
   // Automatically start profiling so that we don't miss timing info from initial "mount".

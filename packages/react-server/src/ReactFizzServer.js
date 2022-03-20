@@ -31,6 +31,7 @@ import {
   scheduleWork,
   beginWriting,
   writeChunk,
+  writeChunkAndReturn,
   completeWriting,
   flushBuffered,
   close,
@@ -113,9 +114,10 @@ import {
   warnAboutDefaultPropsOnFunctionComponents,
   enableScopeAPI,
   enableLazyElements,
-  enableSuspenseAvoidThisFallback,
+  enableSuspenseAvoidThisFallbackFizz,
 } from 'shared/ReactFeatureFlags';
 
+import assign from 'shared/assign';
 import getComponentNameFromType from 'shared/getComponentNameFromType';
 import isArray from 'shared/isArray';
 
@@ -192,13 +194,17 @@ export opaque type Request = {
   partialBoundaries: Array<SuspenseBoundary>, // Partially completed boundaries that can flush its segments early.
   // onError is called when an error happens anywhere in the tree. It might recover.
   onError: (error: mixed) => void,
-  // onCompleteAll is called when all pending task is done but it may not have flushed yet.
+  // onAllReady is called when all pending task is done but it may not have flushed yet.
   // This is a good time to start writing if you want only HTML and no intermediate steps.
-  onCompleteAll: () => void,
-  // onCompleteShell is called when there is at least a root fallback ready to show.
+  onAllReady: () => void,
+  // onShellReady is called when there is at least a root fallback ready to show.
   // Typically you don't need this callback because it's best practice to always have a
   // root fallback ready so there's no need to wait.
-  onCompleteShell: () => void,
+  onShellReady: () => void,
+  // onShellError is called when the shell didn't complete. That means you probably want to
+  // emit a different response to the stream instead.
+  onShellError: (error: mixed) => void,
+  onFatalError: (error: mixed) => void,
 };
 
 // This is a default heuristic for how to split up the HTML content into progressive
@@ -230,8 +236,10 @@ export function createRequest(
   rootFormatContext: FormatContext,
   progressiveChunkSize: void | number,
   onError: void | ((error: mixed) => void),
-  onCompleteAll: void | (() => void),
-  onCompleteShell: void | (() => void),
+  onAllReady: void | (() => void),
+  onShellReady: void | (() => void),
+  onShellError: void | ((error: mixed) => void),
+  onFatalError: void | ((error: mixed) => void),
 ): Request {
   const pingedTasks = [];
   const abortSet: Set<Task> = new Set();
@@ -254,8 +262,10 @@ export function createRequest(
     completedBoundaries: [],
     partialBoundaries: [],
     onError: onError === undefined ? defaultErrorHandler : onError,
-    onCompleteAll: onCompleteAll === undefined ? noop : onCompleteAll,
-    onCompleteShell: onCompleteShell === undefined ? noop : onCompleteShell,
+    onAllReady: onAllReady === undefined ? noop : onAllReady,
+    onShellReady: onShellReady === undefined ? noop : onShellReady,
+    onShellError: onShellError === undefined ? noop : onShellError,
+    onFatalError: onFatalError === undefined ? noop : onFatalError,
   };
   // This segment represents the root fallback.
   const rootSegment = createPendingSegment(request, 0, null, rootFormatContext);
@@ -401,7 +411,7 @@ function popComponentStackInDEV(task: Task): void {
   }
 }
 
-function reportError(request: Request, error: mixed): void {
+function logRecoverableError(request: Request, error: mixed): void {
   // If this callback errors, we intentionally let that error bubble up to become a fatal error
   // so that someone fixes the error reporting instead of hiding it.
   const onError = request.onError;
@@ -412,6 +422,10 @@ function fatalError(request: Request, error: mixed): void {
   // This is called outside error handling code such as if the root errors outside
   // a suspense boundary or if the root suspense boundary's fallback errors.
   // It's also called if React itself or its host configs errors.
+  const onShellError = request.onShellError;
+  onShellError(error);
+  const onFatalError = request.onFatalError;
+  onFatalError(error);
   if (request.destination !== null) {
     request.status = CLOSED;
     closeWithError(request.destination, error);
@@ -474,7 +488,7 @@ function renderSuspenseBoundary(
     // We use the safe form because we don't handle suspending here. Only error handling.
     renderNode(request, task, content);
     contentRootSegment.status = COMPLETED;
-    newBoundary.completedSegments.push(contentRootSegment);
+    queueCompletedSegment(newBoundary, contentRootSegment);
     if (newBoundary.pendingTasks === 0) {
       // This must have been the last segment we were waiting on. This boundary is now complete.
       // Therefore we won't need the fallback. We early return so that we don't have to create
@@ -484,7 +498,7 @@ function renderSuspenseBoundary(
     }
   } catch (error) {
     contentRootSegment.status = ERRORED;
-    reportError(request, error);
+    logRecoverableError(request, error);
     newBoundary.forceClientRender = true;
     // We don't need to decrement any task numbers because we didn't spawn any new task.
     // We don't need to schedule any task because we know the parent has written yet.
@@ -829,7 +843,7 @@ function validateFunctionComponentInDev(Component: any): void {
 function resolveDefaultProps(Component: any, baseProps: Object): Object {
   if (Component && Component.defaultProps) {
     // Resolve default props. Taken from ReactElement
-    const props = Object.assign({}, baseProps);
+    const props = assign({}, baseProps);
     const defaultProps = Component.defaultProps;
     for (const propName in defaultProps) {
       if (props[propName] === undefined) {
@@ -1027,7 +1041,7 @@ function renderElement(
     // eslint-disable-next-line-no-fallthrough
     case REACT_SUSPENSE_TYPE: {
       if (
-        enableSuspenseAvoidThisFallback &&
+        enableSuspenseAvoidThisFallbackFizz &&
         props.unstable_avoidThisFallback === true
       ) {
         renderBackupSuspenseBoundary(request, task, props);
@@ -1337,7 +1351,7 @@ function erroredTask(
   error: mixed,
 ) {
   // Report the error to a global handler.
-  reportError(request, error);
+  logRecoverableError(request, error);
   if (boundary === null) {
     fatalError(request, error);
   } else {
@@ -1359,8 +1373,8 @@ function erroredTask(
 
   request.allPendingTasks--;
   if (request.allPendingTasks === 0) {
-    const onCompleteAll = request.onCompleteAll;
-    onCompleteAll();
+    const onAllReady = request.onAllReady;
+    onAllReady();
   }
 }
 
@@ -1410,9 +1424,32 @@ function abortTask(task: Task): void {
 
     request.allPendingTasks--;
     if (request.allPendingTasks === 0) {
-      const onCompleteAll = request.onCompleteAll;
-      onCompleteAll();
+      const onAllReady = request.onAllReady;
+      onAllReady();
     }
+  }
+}
+
+function queueCompletedSegment(
+  boundary: SuspenseBoundary,
+  segment: Segment,
+): void {
+  if (
+    segment.chunks.length === 0 &&
+    segment.children.length === 1 &&
+    segment.children[0].boundary === null
+  ) {
+    // This is an empty segment. There's nothing to write, so we can instead transfer the ID
+    // to the child. That way any existing references point to the child.
+    const childSegment = segment.children[0];
+    childSegment.id = segment.id;
+    childSegment.parentFlushed = true;
+    if (childSegment.status === COMPLETED) {
+      queueCompletedSegment(boundary, childSegment);
+    }
+  } else {
+    const completedSegments = boundary.completedSegments;
+    completedSegments.push(segment);
   }
 }
 
@@ -1433,8 +1470,10 @@ function finishedTask(
     }
     request.pendingRootTasks--;
     if (request.pendingRootTasks === 0) {
-      const onCompleteShell = request.onCompleteShell;
-      onCompleteShell();
+      // We have completed the shell so the shell can't error anymore.
+      request.onShellError = noop;
+      const onShellReady = request.onShellReady;
+      onShellReady();
     }
   } else {
     boundary.pendingTasks--;
@@ -1447,7 +1486,7 @@ function finishedTask(
         // If it is a segment that was aborted, we'll write other content instead so we don't need
         // to emit it.
         if (segment.status === COMPLETED) {
-          boundary.completedSegments.push(segment);
+          queueCompletedSegment(boundary, segment);
         }
       }
       if (boundary.parentFlushed) {
@@ -1466,8 +1505,8 @@ function finishedTask(
         // If it is a segment that was aborted, we'll write other content instead so we don't need
         // to emit it.
         if (segment.status === COMPLETED) {
+          queueCompletedSegment(boundary, segment);
           const completedSegments = boundary.completedSegments;
-          completedSegments.push(segment);
           if (completedSegments.length === 1) {
             // This is the first time since we last flushed that we completed anything.
             // We can schedule this boundary to emit its partially completed segments early
@@ -1485,8 +1524,8 @@ function finishedTask(
   if (request.allPendingTasks === 0) {
     // This needs to be called at the very end so that we can synchronously write the result
     // in the callback if needed.
-    const onCompleteAll = request.onCompleteAll;
-    onCompleteAll();
+    const onAllReady = request.onAllReady;
+    onAllReady();
   }
 }
 
@@ -1557,7 +1596,7 @@ export function performWork(request: Request): void {
       flushCompletedQueues(request, request.destination);
     }
   } catch (error) {
-    reportError(request, error);
+    logRecoverableError(request, error);
     fatalError(request, error);
   } finally {
     setCurrentResponseState(prevResponseState);
@@ -1606,8 +1645,11 @@ function flushSubtree(
         r = flushSegment(request, destination, nextChild);
       }
       // Finally just write all the remaining chunks
-      for (; chunkIdx < chunks.length; chunkIdx++) {
-        r = writeChunk(destination, chunks[chunkIdx]);
+      for (; chunkIdx < chunks.length - 1; chunkIdx++) {
+        writeChunk(destination, chunks[chunkIdx]);
+      }
+      if (chunkIdx < chunks.length) {
+        r = writeChunkAndReturn(destination, chunks[chunkIdx]);
       }
       return r;
     }
@@ -1941,11 +1983,15 @@ export function startFlowing(request: Request, destination: Destination): void {
   if (request.status === CLOSED) {
     return;
   }
+  if (request.destination !== null) {
+    // We're already flowing.
+    return;
+  }
   request.destination = destination;
   try {
     flushCompletedQueues(request, destination);
   } catch (error) {
-    reportError(request, error);
+    logRecoverableError(request, error);
     fatalError(request, error);
   }
 }
@@ -1960,7 +2006,7 @@ export function abort(request: Request): void {
       flushCompletedQueues(request, request.destination);
     }
   } catch (error) {
-    reportError(request, error);
+    logRecoverableError(request, error);
     fatalError(request, error);
   }
 }

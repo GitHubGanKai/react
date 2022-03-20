@@ -1003,11 +1003,15 @@ describe('ReactSuspenseWithNoopRenderer', () => {
   });
 
   // @gate enableCache
-  it('throws a helpful error when an update is suspends without a placeholder', () => {
-    ReactNoop.render(<AsyncText text="Async" />);
-    expect(Scheduler).toFlushAndThrow(
-      'AsyncText suspended while rendering, but no fallback UI was specified.',
-    );
+  it('errors when an update suspends without a placeholder during a sync update', () => {
+    // This is an error because sync/discrete updates are expected to produce
+    // a complete tree immediately to maintain consistency with external state
+    // — we can't delay the commit.
+    expect(() => {
+      ReactNoop.flushSync(() => {
+        ReactNoop.render(<AsyncText text="Async" />);
+      });
+    }).toThrow('A component suspended while responding to synchronous input.');
   });
 
   // @gate enableCache
@@ -3069,7 +3073,7 @@ describe('ReactSuspenseWithNoopRenderer', () => {
     expect(root).toMatchRenderedOutput(<span prop="Foo" />);
   });
 
-  // @gate enableCache
+  // @gate enableCache && enableLegacyHidden
   it('should not render hidden content while suspended on higher pri', async () => {
     function Offscreen() {
       Scheduler.unstable_yieldValue('Offscreen');
@@ -3119,7 +3123,7 @@ describe('ReactSuspenseWithNoopRenderer', () => {
     );
   });
 
-  // @gate enableCache
+  // @gate enableCache && enableLegacyHidden
   it('should be able to unblock higher pri content before suspended hidden', async () => {
     function Offscreen() {
       Scheduler.unstable_yieldValue('Offscreen');

@@ -39,8 +39,8 @@ import {
   deletedTreeCleanUpLevel,
   enableSuspenseLayoutEffectSemantics,
   enableUpdaterTracking,
-  warnAboutCallbackRefReturningFunction,
   enableCache,
+  enableTransitionTracing,
 } from 'shared/ReactFeatureFlags';
 import {
   FunctionComponent,
@@ -86,8 +86,6 @@ import {
   resetCurrentFiber as resetCurrentDebugFiberInDEV,
   setCurrentFiber as setCurrentDebugFiberInDEV,
 } from './ReactCurrentFiber';
-import {isDevToolsPresent} from './ReactFiberDevToolsHook.old';
-import {onCommitUnmount} from './ReactFiberDevToolsHook.old';
 import {resolveDefaultProps} from './ReactFiberLazyComponent.old';
 import {
   isCurrentUpdateNested,
@@ -135,6 +133,8 @@ import {
   markCommitTimeOfFallback,
   enqueuePendingPassiveProfilerEffect,
   restorePendingUpdaters,
+  addTransitionStartCallbackToPendingTransition,
+  addTransitionCompleteCallbackToPendingTransition,
 } from './ReactFiberWorkLoop.old';
 import {
   NoFlags as NoHookEffect,
@@ -147,6 +147,7 @@ import {didWarnAboutReassigningProps} from './ReactFiberBeginWork.old';
 import {doesFiberContain} from './ReactFiberTreeReflection';
 import {invokeGuardedCallback, clearCaughtError} from 'shared/ReactErrorUtils';
 import {
+  isDevToolsPresent,
   markComponentPassiveEffectMountStarted,
   markComponentPassiveEffectMountStopped,
   markComponentPassiveEffectUnmountStarted,
@@ -155,8 +156,10 @@ import {
   markComponentLayoutEffectMountStopped,
   markComponentLayoutEffectUnmountStarted,
   markComponentLayoutEffectUnmountStopped,
-} from './SchedulingProfiler';
+  onCommitUnmount,
+} from './ReactFiberDevToolsHook.old';
 import {releaseCache, retainCache} from './ReactFiberCacheComponent.old';
+import {clearTransitionsForLanes} from './ReactFiberLane.old';
 
 let didWarnAboutUndefinedSnapshotBeforeUpdate: Set<mixed> | null = null;
 if (__DEV__) {
@@ -286,10 +289,7 @@ function safelyDetachRef(current: Fiber, nearestMountedAncestor: Fiber | null) {
         captureCommitPhaseError(current, nearestMountedAncestor, error);
       }
       if (__DEV__) {
-        if (
-          warnAboutCallbackRefReturningFunction &&
-          typeof retVal === 'function'
-        ) {
+        if (typeof retVal === 'function') {
           console.error(
             'Unexpected return value from a callback ref in %s. ' +
               'A callback ref should not return a function.',
@@ -987,8 +987,10 @@ function commitLayoutEffectOnFiber(
       case IncompleteClassComponent:
       case ScopeComponent:
       case OffscreenComponent:
-      case LegacyHiddenComponent:
+      case LegacyHiddenComponent: {
         break;
+      }
+
       default:
         throw new Error(
           'This unit of work tag should not have side-effects. This error is ' +
@@ -1151,10 +1153,7 @@ function commitAttachRef(finishedWork: Fiber) {
         retVal = ref(instanceToUse);
       }
       if (__DEV__) {
-        if (
-          warnAboutCallbackRefReturningFunction &&
-          typeof retVal === 'function'
-        ) {
+        if (typeof retVal === 'function') {
           console.error(
             'Unexpected return value from a callback ref in %s. ' +
               'A callback ref should not return a function.',
@@ -1568,43 +1567,35 @@ function commitPlacement(finishedWork: Fiber): void {
   const parentFiber = getHostParentFiber(finishedWork);
 
   // Note: these two variables *must* always be updated together.
-  let parent;
-  let isContainer;
-  const parentStateNode = parentFiber.stateNode;
   switch (parentFiber.tag) {
-    case HostComponent:
-      parent = parentStateNode;
-      isContainer = false;
+    case HostComponent: {
+      const parent: Instance = parentFiber.stateNode;
+      if (parentFiber.flags & ContentReset) {
+        // Reset the text content of the parent before doing any insertions
+        resetTextContent(parent);
+        // Clear ContentReset from the effect tag
+        parentFiber.flags &= ~ContentReset;
+      }
+
+      const before = getHostSibling(finishedWork);
+      // We only have the top Fiber that was inserted but we need to recurse down its
+      // children to find all the terminal nodes.
+      insertOrAppendPlacementNode(finishedWork, before, parent);
       break;
+    }
     case HostRoot:
-      parent = parentStateNode.containerInfo;
-      isContainer = true;
+    case HostPortal: {
+      const parent: Container = parentFiber.stateNode.containerInfo;
+      const before = getHostSibling(finishedWork);
+      insertOrAppendPlacementNodeIntoContainer(finishedWork, before, parent);
       break;
-    case HostPortal:
-      parent = parentStateNode.containerInfo;
-      isContainer = true;
-      break;
+    }
     // eslint-disable-next-line-no-fallthrough
     default:
       throw new Error(
         'Invalid host parent fiber. This error is likely caused by a bug ' +
           'in React. Please file an issue.',
       );
-  }
-  if (parentFiber.flags & ContentReset) {
-    // Reset the text content of the parent before doing any insertions
-    resetTextContent(parent);
-    // Clear ContentReset from the effect tag
-    parentFiber.flags &= ~ContentReset;
-  }
-
-  const before = getHostSibling(finishedWork);
-  // We only have the top Fiber that was inserted but we need to recurse down its
-  // children to find all the terminal nodes.
-  if (isContainer) {
-    insertOrAppendPlacementNodeIntoContainer(finishedWork, before, parent);
-  } else {
-    insertOrAppendPlacementNode(finishedWork, before, parent);
   }
 }
 
@@ -2144,13 +2135,13 @@ export function commitMutationEffects(
   inProgressRoot = root;
   nextEffect = firstChild;
 
-  commitMutationEffects_begin(root);
+  commitMutationEffects_begin(root, committedLanes);
 
   inProgressLanes = null;
   inProgressRoot = null;
 }
 
-function commitMutationEffects_begin(root: FiberRoot) {
+function commitMutationEffects_begin(root: FiberRoot, lanes: Lanes) {
   while (nextEffect !== null) {
     const fiber = nextEffect;
 
@@ -2173,17 +2164,17 @@ function commitMutationEffects_begin(root: FiberRoot) {
       ensureCorrectReturnPointer(child, fiber);
       nextEffect = child;
     } else {
-      commitMutationEffects_complete(root);
+      commitMutationEffects_complete(root, lanes);
     }
   }
 }
 
-function commitMutationEffects_complete(root: FiberRoot) {
+function commitMutationEffects_complete(root: FiberRoot, lanes: Lanes) {
   while (nextEffect !== null) {
     const fiber = nextEffect;
     setCurrentDebugFiberInDEV(fiber);
     try {
-      commitMutationEffectsOnFiber(fiber, root);
+      commitMutationEffectsOnFiber(fiber, root, lanes);
     } catch (error) {
       reportUncaughtErrorInDEV(error);
       captureCommitPhaseError(fiber, fiber.return, error);
@@ -2201,12 +2192,42 @@ function commitMutationEffects_complete(root: FiberRoot) {
   }
 }
 
-function commitMutationEffectsOnFiber(finishedWork: Fiber, root: FiberRoot) {
+function commitMutationEffectsOnFiber(
+  finishedWork: Fiber,
+  root: FiberRoot,
+  lanes: Lanes,
+) {
   // TODO: The factoring of this phase could probably be improved. Consider
   // switching on the type of work before checking the flags. That's what
   // we do in all the other phases. I think this one is only different
   // because of the shared reconciliation logic below.
   const flags = finishedWork.flags;
+
+  if (enableTransitionTracing) {
+    switch (finishedWork.tag) {
+      case HostRoot: {
+        const state = finishedWork.memoizedState;
+        const transitions = state.transitions;
+        if (transitions !== null) {
+          transitions.forEach(transition => {
+            // TODO(luna) Do we want to log TransitionStart in the startTransition callback instead?
+            addTransitionStartCallbackToPendingTransition({
+              transitionName: transition.name,
+              startTime: transition.startTime,
+            });
+
+            addTransitionCompleteCallbackToPendingTransition({
+              transitionName: transition.name,
+              startTime: transition.startTime,
+            });
+          });
+
+          clearTransitionsForLanes(root, lanes);
+          state.transitions = null;
+        }
+      }
+    }
+  }
 
   if (flags & ContentReset) {
     commitResetTextContent(finishedWork);

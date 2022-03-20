@@ -28,6 +28,10 @@ function createDrainHandler(destination, request) {
   return () => startFlowing(request, destination);
 }
 
+function createAbortHandler(request) {
+  return () => abort(request);
+}
+
 type Options = {|
   identifierPrefix?: string,
   namespaceURI?: string,
@@ -36,8 +40,9 @@ type Options = {|
   bootstrapScripts?: Array<string>,
   bootstrapModules?: Array<string>,
   progressiveChunkSize?: number,
-  onCompleteShell?: () => void,
-  onCompleteAll?: () => void,
+  onShellReady?: () => void,
+  onShellError?: () => void,
+  onAllReady?: () => void,
   onError?: (error: mixed) => void,
 |};
 
@@ -61,8 +66,10 @@ function createRequestImpl(children: ReactNodeList, options: void | Options) {
     createRootFormatContext(options ? options.namespaceURI : undefined),
     options ? options.progressiveChunkSize : undefined,
     options ? options.onError : undefined,
-    options ? options.onCompleteAll : undefined,
-    options ? options.onCompleteShell : undefined,
+    options ? options.onAllReady : undefined,
+    options ? options.onShellReady : undefined,
+    options ? options.onShellError : undefined,
+    undefined,
   );
 }
 
@@ -83,6 +90,7 @@ function renderToPipeableStream(
       hasStartedFlowing = true;
       startFlowing(request, destination);
       destination.on('drain', createDrainHandler(destination, request));
+      destination.on('close', createAbortHandler(request));
       return destination;
     },
     abort() {

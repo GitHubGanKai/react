@@ -10,6 +10,7 @@
 describe('Store', () => {
   let React;
   let ReactDOM;
+  let ReactDOMClient;
   let agent;
   let act;
   let bridge;
@@ -25,6 +26,7 @@ describe('Store', () => {
 
     React = require('react');
     ReactDOM = require('react-dom');
+    ReactDOMClient = require('react-dom/client');
 
     const utils = require('./utils');
     act = utils.act;
@@ -120,7 +122,9 @@ describe('Store', () => {
       const Component = () => null;
 
       const container = document.createElement('div');
-      const root = ReactDOM.createRoot(container, {unstable_strictMode: true});
+      const root = ReactDOMClient.createRoot(container, {
+        unstable_strictMode: true,
+      });
       act(() => {
         root.render(<App />);
       });
@@ -134,7 +138,7 @@ describe('Store', () => {
       const Component = () => null;
 
       const container = document.createElement('div');
-      const root = ReactDOM.createRoot(container);
+      const root = ReactDOMClient.createRoot(container);
       act(() => {
         root.render(<App />);
       });
@@ -152,7 +156,7 @@ describe('Store', () => {
       const Component = () => null;
 
       const container = document.createElement('div');
-      const root = ReactDOM.createRoot(container);
+      const root = ReactDOMClient.createRoot(container);
       act(() => {
         root.render(<App />);
       });
@@ -466,7 +470,7 @@ describe('Store', () => {
       );
 
       const container = document.createElement('div');
-      const root = ReactDOM.createRoot(container);
+      const root = ReactDOMClient.createRoot(container);
       act(() => {
         root.render(<Wrapper shouldSuspense={true} />);
       });
@@ -915,17 +919,17 @@ describe('Store', () => {
     const containerA = document.createElement('div');
     const containerB = document.createElement('div');
 
-    expect(store.supportsProfiling).toBe(false);
+    expect(store.rootSupportsBasicProfiling).toBe(false);
 
     act(() => legacyRender(<Component />, containerA));
-    expect(store.supportsProfiling).toBe(true);
+    expect(store.rootSupportsBasicProfiling).toBe(true);
 
     act(() => legacyRender(<Component />, containerB));
     act(() => ReactDOM.unmountComponentAtNode(containerA));
-    expect(store.supportsProfiling).toBe(true);
+    expect(store.rootSupportsBasicProfiling).toBe(true);
 
     act(() => ReactDOM.unmountComponentAtNode(containerB));
-    expect(store.supportsProfiling).toBe(false);
+    expect(store.rootSupportsBasicProfiling).toBe(false);
   });
 
   it('should properly serialize non-string key values', () => {
@@ -1070,7 +1074,7 @@ describe('Store', () => {
 
     it('should support Lazy components in (createRoot)', async () => {
       const container = document.createElement('div');
-      const root = ReactDOM.createRoot(container);
+      const root = ReactDOMClient.createRoot(container);
 
       // Render once to start fetching the lazy component
       act(() => root.render(<App renderChildren={true} />));
@@ -1106,7 +1110,7 @@ describe('Store', () => {
 
     it('should support Lazy components that are unmounted before they finish loading in (createRoot)', async () => {
       const container = document.createElement('div');
-      const root = ReactDOM.createRoot(container);
+      const root = ReactDOMClient.createRoot(container);
 
       // Render once to start fetching the lazy component
       act(() => root.render(<App renderChildren={true} />));

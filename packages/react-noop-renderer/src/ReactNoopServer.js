@@ -53,26 +53,34 @@ type Destination = {
 
 const POP = Buffer.from('/', 'utf8');
 
+function write(destination: Destination, buffer: Uint8Array): void {
+  const stack = destination.stack;
+  if (buffer === POP) {
+    stack.pop();
+    return;
+  }
+  // We assume one chunk is one instance.
+  const instance = JSON.parse(Buffer.from((buffer: any)).toString('utf8'));
+  if (stack.length === 0) {
+    destination.root = instance;
+  } else {
+    const parent = stack[stack.length - 1];
+    parent.children.push(instance);
+  }
+  stack.push(instance);
+}
+
 const ReactNoopServer = ReactFizzServer({
   scheduleWork(callback: () => void) {
     callback();
   },
   beginWriting(destination: Destination): void {},
   writeChunk(destination: Destination, buffer: Uint8Array): void {
-    const stack = destination.stack;
-    if (buffer === POP) {
-      stack.pop();
-      return;
-    }
-    // We assume one chunk is one instance.
-    const instance = JSON.parse(Buffer.from((buffer: any)).toString('utf8'));
-    if (stack.length === 0) {
-      destination.root = instance;
-    } else {
-      const parent = stack[stack.length - 1];
-      parent.children.push(instance);
-    }
-    stack.push(instance);
+    write(destination, buffer);
+  },
+  writeChunkAndReturn(destination: Destination, buffer: Uint8Array): boolean {
+    write(destination, buffer);
+    return true;
   },
   completeWriting(destination: Destination): void {},
   close(destination: Destination): void {},
@@ -243,8 +251,8 @@ const ReactNoopServer = ReactFizzServer({
 
 type Options = {
   progressiveChunkSize?: number,
-  onCompleteShell?: () => void,
-  onCompleteAll?: () => void,
+  onShellReady?: () => void,
+  onAllReady?: () => void,
   onError?: (error: mixed) => void,
 };
 
@@ -264,8 +272,8 @@ function render(children: React$Element<any>, options?: Options): Destination {
     null,
     options ? options.progressiveChunkSize : undefined,
     options ? options.onError : undefined,
-    options ? options.onCompleteAll : undefined,
-    options ? options.onCompleteShell : undefined,
+    options ? options.onAllReady : undefined,
+    options ? options.onShellReady : undefined,
   );
   ReactNoopServer.startWork(request);
   ReactNoopServer.startFlowing(request, destination);
