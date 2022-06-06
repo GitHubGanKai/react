@@ -27,13 +27,23 @@ import {
 } from 'shared/ReactSymbols';
 import {
   enableScopeAPI,
-  enableCache,
+  enableCacheElement,
   enableTransitionTracing,
   enableDebugTracing,
   enableLegacyHidden,
+  enableSymbolFallbackForWWW,
 } from './ReactFeatureFlags';
 
-const REACT_MODULE_REFERENCE: Symbol = Symbol.for('react.module.reference');
+let REACT_MODULE_REFERENCE;
+if (enableSymbolFallbackForWWW) {
+  if (typeof Symbol === 'function') {
+    REACT_MODULE_REFERENCE = Symbol.for('react.module.reference');
+  } else {
+    REACT_MODULE_REFERENCE = 0;
+  }
+} else {
+  REACT_MODULE_REFERENCE = Symbol.for('react.module.reference');
+}
 
 export default function isValidElementType(type: mixed) {
   if (typeof type === 'string' || typeof type === 'function') {
@@ -51,7 +61,7 @@ export default function isValidElementType(type: mixed) {
     (enableLegacyHidden && type === REACT_LEGACY_HIDDEN_TYPE) ||
     type === REACT_OFFSCREEN_TYPE ||
     (enableScopeAPI && type === REACT_SCOPE_TYPE) ||
-    (enableCache && type === REACT_CACHE_TYPE) ||
+    (enableCacheElement && type === REACT_CACHE_TYPE) ||
     (enableTransitionTracing && type === REACT_TRACING_MARKER_TYPE)
   ) {
     return true;
