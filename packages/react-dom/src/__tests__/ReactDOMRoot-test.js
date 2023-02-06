@@ -1,5 +1,5 @@
 /**
- * Copyright (c) Facebook, Inc. and its affiliates.
+ * Copyright (c) Meta Platforms, Inc. and affiliates.
  *
  * This source code is licensed under the MIT license found in the
  * LICENSE file in the root directory of this source tree.
@@ -62,9 +62,7 @@ describe('ReactDOMRoot', () => {
   it('warns if a callback parameter is provided to render', () => {
     const callback = jest.fn();
     const root = ReactDOMClient.createRoot(container);
-    expect(() =>
-      root.render(<div>Hi</div>, callback),
-    ).toErrorDev(
+    expect(() => root.render(<div>Hi</div>, callback)).toErrorDev(
       'render(...): does not support the second callback argument. ' +
         'To execute a side effect after rendering, declare it in a component body with useEffect().',
       {withoutStack: true},
@@ -108,9 +106,7 @@ describe('ReactDOMRoot', () => {
     const callback = jest.fn();
     const root = ReactDOMClient.createRoot(container);
     root.render(<div>Hi</div>);
-    expect(() =>
-      root.unmount(callback),
-    ).toErrorDev(
+    expect(() => root.unmount(callback)).toErrorDev(
       'unmount(...): does not support a callback argument. ' +
         'To execute a side effect after rendering, declare it in a component body with useEffect().',
       {withoutStack: true},
@@ -364,15 +360,21 @@ describe('ReactDOMRoot', () => {
     Scheduler.unstable_flushAll();
     container.innerHTML = '';
 
-    expect(() => {
+    if (gate(flags => flags.enableFloat || flags.enableHostSingletons)) {
+      // When either of these flags are on this validation is turned off so we
+      // expect there to be no warnings
       root.render(<div>Hi</div>);
-    }).toErrorDev(
-      'render(...): It looks like the React-rendered content of the ' +
-        'root container was removed without using React. This is not ' +
-        'supported and will cause errors. Instead, call ' +
-        "root.unmount() to empty a root's container.",
-      {withoutStack: true},
-    );
+    } else {
+      expect(() => {
+        root.render(<div>Hi</div>);
+      }).toErrorDev(
+        'render(...): It looks like the React-rendered content of the ' +
+          'root container was removed without using React. This is not ' +
+          'supported and will cause errors. Instead, call ' +
+          "root.unmount() to empty a root's container.",
+        {withoutStack: true},
+      );
+    }
   });
 
   it('opts-in to concurrent default updates', async () => {
@@ -484,9 +486,7 @@ describe('ReactDOMRoot', () => {
   });
 
   it('warn if no children passed to hydrateRoot', async () => {
-    expect(() =>
-      ReactDOMClient.hydrateRoot(container),
-    ).toErrorDev(
+    expect(() => ReactDOMClient.hydrateRoot(container)).toErrorDev(
       'Must provide initial children as second argument to hydrateRoot.',
       {withoutStack: true},
     );

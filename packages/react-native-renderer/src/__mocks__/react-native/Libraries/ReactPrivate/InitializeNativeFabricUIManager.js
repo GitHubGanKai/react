@@ -1,5 +1,5 @@
 /**
- * Copyright (c) Facebook, Inc. and its affiliates.
+ * Copyright (c) Meta Platforms, Inc. and affiliates.
  *
  * This source code is licensed under the MIT license found in the
  * LICENSE file in the root directory of this source tree.
@@ -23,7 +23,7 @@ function dumpSubtree(info, indent) {
 }
 
 const RCTFabricUIManager = {
-  __dumpChildSetForJestTestsOnly: function(childSet) {
+  __dumpChildSetForJestTestsOnly: function (childSet) {
     const result = [];
     // eslint-disable-next-line no-for-of-loops/no-for-of-loops
     for (const child of childSet) {
@@ -31,7 +31,7 @@ const RCTFabricUIManager = {
     }
     return result.join('\n');
   },
-  __dumpHierarchyForJestTestsOnly: function() {
+  __dumpHierarchyForJestTestsOnly: function () {
     const result = [];
     // eslint-disable-next-line no-for-of-loops/no-for-of-loops
     for (const [rootTag, childSet] of roots) {
@@ -116,6 +116,8 @@ const RCTFabricUIManager = {
   }),
 
   dispatchCommand: jest.fn(),
+
+  setNativeProps: jest.fn(),
 
   sendAccessibilityEvent: jest.fn(),
 

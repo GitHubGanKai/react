@@ -1,5 +1,5 @@
 /**
- * Copyright (c) Facebook, Inc. and its affiliates.
+ * Copyright (c) Meta Platforms, Inc. and affiliates.
  *
  * This source code is licensed under the MIT license found in the
  * LICENSE file in the root directory of this source tree.
@@ -206,11 +206,11 @@ describe('ReactDOMFiber', () => {
   const expectHTML = {ref: el => htmlEls.push(el)};
   const expectMath = {ref: el => mathEls.push(el)};
 
-  const usePortal = function(tree) {
+  const usePortal = function (tree) {
     return ReactDOM.createPortal(tree, document.createElement('div'));
   };
 
-  const assertNamespacesMatch = function(tree) {
+  const assertNamespacesMatch = function (tree) {
     const testContainer = document.createElement('div');
     svgEls = [];
     htmlEls = [];
@@ -1213,9 +1213,7 @@ describe('ReactDOMFiber', () => {
     expect(container.innerHTML).toBe('<div>bar</div>');
     // then we mess with the DOM before an update
     container.innerHTML = '<div>MEOW.</div>';
-    expect(() =>
-      ReactDOM.render(<div>baz</div>, container),
-    ).toErrorDev(
+    expect(() => ReactDOM.render(<div>baz</div>, container)).toErrorDev(
       'render(...): ' +
         'It looks like the React-rendered content of this container was ' +
         'removed without using React. This is not supported and will ' +
@@ -1232,9 +1230,7 @@ describe('ReactDOMFiber', () => {
     expect(container.innerHTML).toBe('<div>bar</div>');
     // then we mess with the DOM before an update
     container.innerHTML = '';
-    expect(() =>
-      ReactDOM.render(<div>baz</div>, container),
-    ).toErrorDev(
+    expect(() => ReactDOM.render(<div>baz</div>, container)).toErrorDev(
       'render(...): ' +
         'It looks like the React-rendered content of this container was ' +
         'removed without using React. This is not supported and will ' +

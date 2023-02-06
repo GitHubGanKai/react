@@ -1,5 +1,5 @@
 /**
- * Copyright (c) Facebook, Inc. and its affiliates.
+ * Copyright (c) Meta Platforms, Inc. and affiliates.
  *
  * This source code is licensed under the MIT license found in the
  * LICENSE file in the root directory of this source tree.
@@ -18,7 +18,7 @@ let act;
 describe('ReactES6Class', () => {
   let container;
   let root;
-  const freeze = function(expectation) {
+  const freeze = function (expectation) {
     Object.freeze(expectation);
     return expectation;
   };
@@ -147,7 +147,9 @@ describe('ReactES6Class', () => {
         return <div />;
       }
     }
-    expect(() => act(() => root.render(<Foo foo="foo" />))).toErrorDev(
+    expect(() => {
+      act(() => root.render(<Foo foo="foo" />));
+    }).toErrorDev(
       'Foo: getDerivedStateFromProps() is defined as an instance method ' +
         'and will be ignored. Instead, declare it as a static method.',
     );
@@ -162,7 +164,9 @@ describe('ReactES6Class', () => {
         return <div />;
       }
     }
-    expect(() => act(() => root.render(<Foo foo="foo" />))).toErrorDev(
+    expect(() => {
+      act(() => root.render(<Foo foo="foo" />));
+    }).toErrorDev(
       'Foo: getDerivedStateFromError() is defined as an instance method ' +
         'and will be ignored. Instead, declare it as a static method.',
     );
@@ -175,7 +179,9 @@ describe('ReactES6Class', () => {
         return <div />;
       }
     }
-    expect(() => act(() => root.render(<Foo foo="foo" />))).toErrorDev(
+    expect(() => {
+      act(() => root.render(<Foo foo="foo" />));
+    }).toErrorDev(
       'Foo: getSnapshotBeforeUpdate() is defined as a static method ' +
         'and will be ignored. Instead, declare it as an instance method.',
     );
@@ -193,7 +199,9 @@ describe('ReactES6Class', () => {
         return <div className={`${this.state.foo} ${this.state.bar}`} />;
       }
     }
-    expect(() => act(() => root.render(<Foo foo="foo" />))).toErrorDev(
+    expect(() => {
+      act(() => root.render(<Foo foo="foo" />));
+    }).toErrorDev(
       '`Foo` uses `getDerivedStateFromProps` but its initial state is ' +
         'undefined. This is not recommended. Instead, define the initial state by ' +
         'assigning an object to `this.state` in the constructor of `Foo`. ' +
@@ -293,7 +301,7 @@ describe('ReactES6Class', () => {
   });
 
   it('should warn with non-object in the initial state property', () => {
-    [['an array'], 'a string', 1234].forEach(function(state) {
+    [['an array'], 'a string', 1234].forEach(function (state) {
       class Foo extends React.Component {
         constructor() {
           super();
@@ -541,9 +549,7 @@ describe('ReactES6Class', () => {
       'replaceState(...) is deprecated in plain JavaScript React classes',
       {withoutStack: true},
     );
-    expect(() =>
-      expect(() => ref.current.isMounted()).toThrow(),
-    ).toWarnDev(
+    expect(() => expect(() => ref.current.isMounted()).toThrow()).toWarnDev(
       'isMounted(...) is deprecated in plain JavaScript React classes',
       {withoutStack: true},
     );
@@ -568,14 +574,22 @@ describe('ReactES6Class', () => {
     test(<Foo />, 'DIV', 'bar-through-context');
   });
 
-  it('supports classic refs', () => {
+  it('supports string refs', () => {
     class Foo extends React.Component {
       render() {
         return <Inner name="foo" ref="inner" />;
       }
     }
     const ref = React.createRef();
-    test(<Foo ref={ref} />, 'DIV', 'foo');
+    expect(() => {
+      test(<Foo ref={ref} />, 'DIV', 'foo');
+    }).toErrorDev([
+      'Warning: Component "Foo" contains the string ref "inner". ' +
+        'Support for string refs will be removed in a future major release. ' +
+        'We recommend using useRef() or createRef() instead. ' +
+        'Learn more about using refs safely here: https://reactjs.org/link/strict-mode-string-ref\n' +
+        '    in Foo (at **)',
+    ]);
     expect(ref.current.refs.inner.getName()).toBe('foo');
   });
 

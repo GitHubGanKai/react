@@ -1,5 +1,5 @@
 /**
- * Copyright (c) Facebook, Inc. and its affiliates.
+ * Copyright (c) Meta Platforms, Inc. and affiliates.
  *
  * This source code is licensed under the MIT license found in the
  * LICENSE file in the root directory of this source tree.
@@ -57,7 +57,7 @@ function hookNamesModuleLoaderFunction() {
   );
 }
 
-function setContentDOMNode(value: HTMLElement) {
+function setContentDOMNode(value: HTMLElement): typeof DevtoolsUI {
   node = value;
 
   // Save so we can restore the exact waiting message between sessions.
@@ -70,12 +70,14 @@ function setProjectRoots(value: Array<string>) {
   projectRoots = value;
 }
 
-function setStatusListener(value: StatusListener) {
+function setStatusListener(value: StatusListener): typeof DevtoolsUI {
   statusListener = value;
   return DevtoolsUI;
 }
 
-function setDisconnectedCallback(value: OnDisconnectedCallback) {
+function setDisconnectedCallback(
+  value: OnDisconnectedCallback,
+): typeof DevtoolsUI {
   disconnectedCallback = value;
   return DevtoolsUI;
 }
@@ -84,11 +86,12 @@ let bridge: FrontendBridge | null = null;
 let store: Store | null = null;
 let root = null;
 
-const log = (...args) => console.log('[React DevTools]', ...args);
-log.warn = (...args) => console.warn('[React DevTools]', ...args);
-log.error = (...args) => console.error('[React DevTools]', ...args);
+const log = (...args: Array<mixed>) => console.log('[React DevTools]', ...args);
+log.warn = (...args: Array<mixed>) => console.warn('[React DevTools]', ...args);
+log.error = (...args: Array<mixed>) =>
+  console.error('[React DevTools]', ...args);
 
-function debug(methodName: string, ...args) {
+function debug(methodName: string, ...args: Array<mixed>) {
   if (__DEBUG__) {
     console.log(
       `%c[core/standalone] %c${methodName}`,
@@ -164,6 +167,7 @@ function onDisconnected() {
   disconnectedCallback();
 }
 
+// $FlowFixMe[missing-local-annot]
 function onError({code, message}) {
   safeUnmount();
 
@@ -254,9 +258,10 @@ function initialize(socket: WebSocket) {
     socket.close();
   });
 
+  // $FlowFixMe[incompatible-call] found when upgrading Flow
   store = new Store(bridge, {
     checkBridgeProtocolCompatibility: true,
-    supportsNativeInspection: false,
+    supportsNativeInspection: true,
   });
 
   log('Connected');
@@ -266,7 +271,7 @@ function initialize(socket: WebSocket) {
 
 let startServerTimeoutID: TimeoutID | null = null;
 
-function connectToSocket(socket: WebSocket) {
+function connectToSocket(socket: WebSocket): {close(): void} {
   socket.onerror = err => {
     onDisconnected();
     log.error('Error with websocket connection', err);
@@ -278,27 +283,27 @@ function connectToSocket(socket: WebSocket) {
   initialize(socket);
 
   return {
-    close: function() {
+    close: function () {
       onDisconnected();
     },
   };
 }
 
-type ServerOptions = {|
+type ServerOptions = {
   key?: string,
   cert?: string,
-|};
+};
 
-type LoggerOptions = {|
+type LoggerOptions = {
   surface?: ?string,
-|};
+};
 
 function startServer(
   port?: number = 8097,
   host?: string = 'localhost',
   httpsOptions?: ServerOptions,
   loggerOptions?: LoggerOptions,
-) {
+): {close(): void} {
   registerDevToolsEventLogger(loggerOptions?.surface ?? 'standalone');
 
   const useHttps = !!httpsOptions;
@@ -385,7 +390,7 @@ function startServer(
   });
 
   return {
-    close: function() {
+    close: function () {
       connected = null;
       onDisconnected();
       if (startServerTimeoutID !== null) {

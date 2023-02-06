@@ -1,8 +1,10 @@
 /**
- * Copyright (c) Facebook, Inc. and its affiliates.
+ * Copyright (c) Meta Platforms, Inc. and affiliates.
  *
  * This source code is licensed under the MIT license found in the
  * LICENSE file in the root directory of this source tree.
+ *
+ * @noflow
  */
 
 // Provided by www
@@ -14,7 +16,7 @@ if (typeof ReactFbErrorUtils.invokeGuardedCallback !== 'function') {
   );
 }
 
-const invokeGuardedCallbackImpl = function<A, B, C, D, E, F, Context>(
+const invokeGuardedCallbackImpl = function <A, B, C, D, E, F, Context>(
   name: string | null,
   func: (a: A, b: B, c: C, d: D, e: E, f: F) => mixed,
   context: Context,

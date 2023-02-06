@@ -1,5 +1,5 @@
 /**
- * Copyright (c) Facebook, Inc. and its affiliates.
+ * Copyright (c) Meta Platforms, Inc. and affiliates.
  *
  * This source code is licensed under the MIT license found in the
  * LICENSE file in the root directory of this source tree.
@@ -41,9 +41,10 @@ describe('ReactDeferredValue', () => {
       // render. A naive implementation would endlessly spawn deferred renders.
       const {value: deferredValue} = useDeferredValue({value});
 
-      const child = useMemo(() => <Text text={'Original: ' + value} />, [
-        value,
-      ]);
+      const child = useMemo(
+        () => <Text text={'Original: ' + value} />,
+        [value],
+      );
 
       const deferredChild = useMemo(
         () => <Text text={'Deferred: ' + deferredValue} />,
@@ -101,9 +102,10 @@ describe('ReactDeferredValue', () => {
     function App({value}) {
       const deferredValue = useDeferredValue(value);
 
-      const child = useMemo(() => <Text text={'Original: ' + value} />, [
-        value,
-      ]);
+      const child = useMemo(
+        () => <Text text={'Original: ' + value} />,
+        [value],
+      );
 
       const deferredChild = useMemo(
         () => <Text text={'Deferred: ' + deferredValue} />,
@@ -166,9 +168,10 @@ describe('ReactDeferredValue', () => {
 
       const deferredValue = useDeferredValue(value);
 
-      const child = useMemo(() => <Text text={'Original: ' + value} />, [
-        value,
-      ]);
+      const child = useMemo(
+        () => <Text text={'Original: ' + value} />,
+        [value],
+      );
 
       const deferredChild = useMemo(
         () => <Text text={'Deferred: ' + deferredValue} />,
@@ -231,9 +234,10 @@ describe('ReactDeferredValue', () => {
 
       const deferredValue = useDeferredValue(value);
 
-      const child = useMemo(() => <Text text={'Original: ' + value} />, [
-        value,
-      ]);
+      const child = useMemo(
+        () => <Text text={'Original: ' + value} />,
+        [value],
+      );
 
       const deferredChild = useMemo(
         () => <Text text={'Deferred: ' + deferredValue} />,

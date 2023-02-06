@@ -1,5 +1,5 @@
 /**
- * Copyright (c) Facebook, Inc. and its affiliates.
+ * Copyright (c) Meta Platforms, Inc. and affiliates.
  *
  * This source code is licensed under the MIT license found in the
  * LICENSE file in the root directory of this source tree.
@@ -38,7 +38,7 @@ describe('ReactDOMServerHydration', () => {
   function normalizeCodeLocInfo(str) {
     return (
       typeof str === 'string' &&
-      str.replace(/\n +(?:at|in) ([\S]+)[^\n]*/g, function(m, name) {
+      str.replace(/\n +(?:at|in) ([\S]+)[^\n]*/g, function (m, name) {
         return '\n    in ' + name + ' (at **)';
       })
     );
@@ -727,9 +727,14 @@ describe('ReactDOMServerHydration', () => {
             </div>
           );
         }
+
+        // @TODO changes made to sending Fizz errors to client led to the insertion of templates in client rendered
+        // suspense boundaries. This leaks in this test becuase the client rendered suspense boundary appears like
+        // unhydrated tail nodes and this template is the first match. When we add special case handling for client
+        // rendered suspense boundaries this test will likely change again
         expect(testMismatch(Mismatch)).toMatchInlineSnapshot(`
             Array [
-              "Warning: Did not expect server HTML to contain a <p> in <div>.
+              "Warning: Did not expect server HTML to contain a <template> in <div>.
                 in div (at **)
                 in Mismatch (at **)",
               "Warning: An error occurred during hydration. The server HTML was replaced with client content in <div>.",
@@ -809,11 +814,12 @@ describe('ReactDOMServerHydration', () => {
             </div>
           );
         }
+
         expect(testMismatch(Mismatch)).toMatchInlineSnapshot(`
-          Array [
-            "Caught [The server could not finish this Suspense boundary, likely due to an error during server rendering. Switched to client rendering.]",
-          ]
-        `);
+            Array [
+              "Caught [The server did not finish this Suspense boundary: The server used \\"renderToString\\" which does not support Suspense. If you intended for this Suspense boundary to render the fallback content on the server consider throwing an Error somewhere within the Suspense boundary. If you intended to have the server wait for the suspended component please switch to \\"renderToPipeableStream\\" which supports Suspense on the server]",
+            ]
+          `);
       });
 
       // @gate __DEV__
@@ -834,11 +840,12 @@ describe('ReactDOMServerHydration', () => {
             </div>
           );
         }
+
         expect(testMismatch(Mismatch)).toMatchInlineSnapshot(`
-          Array [
-            "Caught [The server could not finish this Suspense boundary, likely due to an error during server rendering. Switched to client rendering.]",
-          ]
-        `);
+            Array [
+              "Caught [The server did not finish this Suspense boundary: The server used \\"renderToString\\" which does not support Suspense. If you intended for this Suspense boundary to render the fallback content on the server consider throwing an Error somewhere within the Suspense boundary. If you intended to have the server wait for the suspended component please switch to \\"renderToPipeableStream\\" which supports Suspense on the server]",
+            ]
+          `);
       });
     });
 

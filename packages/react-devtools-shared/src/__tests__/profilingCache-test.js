@@ -1,5 +1,5 @@
 /**
- * Copyright (c) Facebook, Inc. and its affiliates.
+ * Copyright (c) Meta Platforms, Inc. and affiliates.
  *
  * This source code is licensed under the MIT license found in the
  * LICENSE file in the root directory of this source tree.
@@ -182,14 +182,14 @@ describe('ProfilingCache', () => {
 
     const rootID = store.roots[0];
 
-    const prevCommitData = store.profilerStore.getDataForRoot(rootID)
-      .commitData;
+    const prevCommitData =
+      store.profilerStore.getDataForRoot(rootID).commitData;
     expect(prevCommitData).toHaveLength(4);
 
     utils.exportImportHelper(bridge, store);
 
-    const nextCommitData = store.profilerStore.getDataForRoot(rootID)
-      .commitData;
+    const nextCommitData =
+      store.profilerStore.getDataForRoot(rootID).commitData;
     expect(nextCommitData).toHaveLength(4);
     nextCommitData.forEach((commitData, index) => {
       expect(commitData).toEqual(prevCommitData[index]);
@@ -202,10 +202,7 @@ describe('ProfilingCache', () => {
 
     const ModernContext = React.createContext(0);
 
-    class LegacyContextProvider extends React.Component<
-      any,
-      {|count: number|},
-    > {
+    class LegacyContextProvider extends React.Component<any, {count: number}> {
       static childContextTypes = {
         count: PropTypes.number,
       };
@@ -1097,8 +1094,10 @@ describe('ProfilingCache', () => {
     utils.act(() => setChildUnmounted(true));
     utils.act(() => store.profilerStore.stopProfiling());
 
-    const updaters = store.profilerStore.getCommitData(store.roots[0], 0)
-      .updaters;
+    const updaters = store.profilerStore.getCommitData(
+      store.roots[0],
+      0,
+    ).updaters;
     expect(updaters.length).toEqual(1);
     expect(updaters[0].displayName).toEqual('App');
   });
@@ -1132,8 +1131,10 @@ describe('ProfilingCache', () => {
     utils.act(() => setChildUnmounted(true));
     utils.act(() => store.profilerStore.stopProfiling());
 
-    const updaters = store.profilerStore.getCommitData(store.roots[0], 0)
-      .updaters;
+    const updaters = store.profilerStore.getCommitData(
+      store.roots[0],
+      0,
+    ).updaters;
     expect(updaters.length).toEqual(1);
     expect(updaters[0].displayName).toEqual('App');
   });
@@ -1162,8 +1163,10 @@ describe('ProfilingCache', () => {
     utils.act(() => setChildUnmounted(true));
     utils.act(() => store.profilerStore.stopProfiling());
 
-    const updaters = store.profilerStore.getCommitData(store.roots[0], 0)
-      .updaters;
+    const updaters = store.profilerStore.getCommitData(
+      store.roots[0],
+      0,
+    ).updaters;
     expect(updaters.length).toEqual(1);
     expect(updaters[0].displayName).toEqual('App');
   });

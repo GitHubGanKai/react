@@ -1,5 +1,5 @@
 /**
- * Copyright (c) Facebook, Inc. and its affiliates.
+ * Copyright (c) Meta Platforms, Inc. and affiliates.
  *
  * This source code is licensed under the MIT license found in the
  * LICENSE file in the root directory of this source tree.
@@ -13,7 +13,6 @@
 // Flags that can likely be deleted or landed without consequences
 // -----------------------------------------------------------------------------
 
-export const warnAboutDeprecatedLifecycles = true;
 export const enableComponentStackLocations = true;
 export const disableSchedulerTimeoutBasedOnReactExpirationTime = false;
 
@@ -24,26 +23,16 @@ export const disableSchedulerTimeoutBasedOnReactExpirationTime = false;
 // like migrating internal callers or performance testing.
 // -----------------------------------------------------------------------------
 
-// This is blocked on adding a symbol polyfill to www.
-export const enableSymbolFallbackForWWW = false;
-
 // This rolled out to 10% public in www, so we should be able to land, but some
 // internal tests need to be updated. The open source behavior is correct.
 export const skipUnmountedBoundaries = true;
-
-// Destroy layout effects for components that are hidden because something
-// suspended in an update and recreate them when they are shown again (after the
-// suspended boundary has resolved). Note that this should be an uncommon use
-// case and can be avoided by using the transition API.
-//
-// TODO: Finish rolling out in www
-export const enableSuspenseLayoutEffectSemantics = true;
 
 // TODO: Finish rolling out in www
 export const enableClientRenderFallbackOnTextMismatch = true;
 
 // TODO: Need to review this code one more time before landing
-export const enableCapturePhaseSelectiveHydrationWithoutDiscreteEventReplay = true;
+export const enableCapturePhaseSelectiveHydrationWithoutDiscreteEventReplay =
+  true;
 
 // Recoil still uses useMutableSource in www, need to delete
 export const enableUseMutableSource = false;
@@ -79,10 +68,6 @@ export const enableScopeAPI = false;
 // Experimental Create Event Handle API.
 export const enableCreateEventHandleAPI = false;
 
-// This controls whether you get the `.old` modules or the `.new` modules in
-// the react-reconciler package.
-export const enableNewReconciler = false;
-
 // Support legacy Primer support on internal FB www
 export const enableLegacyFBSupport = false;
 
@@ -93,8 +78,10 @@ export const enableLegacyFBSupport = false;
 // likely to include in an upcoming release.
 // -----------------------------------------------------------------------------
 
-export const enableCache = __EXPERIMENTAL__;
+export const enableCache = true;
+export const enableLegacyCache = __EXPERIMENTAL__;
 export const enableCacheElement = __EXPERIMENTAL__;
+export const enableFetchInstrumentation = true;
 
 export const enableTransitionTracing = false;
 
@@ -111,24 +98,28 @@ export const enableSuspenseAvoidThisFallbackFizz = false;
 
 export const enableCPUSuspense = __EXPERIMENTAL__;
 
-// When a node is unmounted, recurse into the Fiber subtree and clean out
-// references. Each level cleans up more fiber fields than the previous level.
-// As far as we know, React itself doesn't leak, but because the Fiber contains
-// cycles, even a single leak in product code can cause us to retain large
-// amounts of memory.
-//
-// The long term plan is to remove the cycles, but in the meantime, we clear
-// additional fields to mitigate.
-//
-// It's an enum so that we can experiment with different levels of
-// aggressiveness.
-export const deletedTreeCleanUpLevel = 3;
+export const enableHostSingletons = true;
+
+export const enableFloat = true;
+
+export const enableUseHook = true;
+
+// Enables unstable_useMemoCache hook, intended as a compilation target for
+// auto-memoization.
+export const enableUseMemoCacheHook = __EXPERIMENTAL__;
+
+export const enableUseEffectEventHook = __EXPERIMENTAL__;
+
+// Test in www before enabling in open source.
+// Enables DOM-server to stream its instruction set as data-attributes
+// (handled with an MutationObserver) instead of inline-scripts
+export const enableFizzExternalRuntime = false;
 
 // -----------------------------------------------------------------------------
 // Chopping Block
 //
 // Planned feature deprecations and breaking changes. Sorted roughly in order of
-// when we we plan to enable them.
+// when we plan to enable them.
 // -----------------------------------------------------------------------------
 
 // This flag enables Strict Effects by default. We're not turning this on until
@@ -146,6 +137,8 @@ export const enableUseRefAccessWarning = false;
 
 // Enables time slicing for updates that aren't wrapped in startTransition.
 export const enableSyncDefaultUpdates = true;
+
+export const enableUnifiedSyncLane = __EXPERIMENTAL__;
 
 // Adds an opt-in to time slicing for updates that aren't wrapped in
 // startTransition. Only relevant when enableSyncDefaultUpdates is disabled.
@@ -194,26 +187,6 @@ export const enableCustomElementPropertySupport = __EXPERIMENTAL__;
 export const disableTextareaChildren = false;
 
 // -----------------------------------------------------------------------------
-// JSX Chopping Block
-//
-// Similar to main Chopping Block but only flags related to JSX. These are
-// grouped because we will likely batch all of them into a single major release.
-// -----------------------------------------------------------------------------
-
-// New API for JSX transforms to target - https://github.com/reactjs/rfcs/pull/107
-
-// Part of the simplification of React.createElement so we can eventually move
-// from React.createElement to React.jsx
-// https://github.com/reactjs/rfcs/blob/createlement-rfc/text/0000-create-element-changes.md
-export const warnAboutDefaultPropsOnFunctionComponents = false; // deprecate later, not 18.0
-
-// Enables a warning when trying to spread a 'key' to an element;
-// a deprecated pattern we want to get rid of in the future
-export const warnAboutSpreadingKeyToJSX = false;
-
-export const warnAboutStringRefs = false;
-
-// -----------------------------------------------------------------------------
 // Debugging and DevTools
 // -----------------------------------------------------------------------------
 
@@ -224,10 +197,6 @@ export const enableSchedulingProfiler = __PROFILE__;
 // Helps identify side effects in render-phase lifecycle hooks and setState
 // reducers by double invoking them in StrictLegacyMode.
 export const debugRenderPhaseSideEffectsForStrictMode = __DEV__;
-
-// Helps identify code that is not safe for planned Offscreen API and Suspense semantics;
-// this feature flag only impacts StrictEffectsMode.
-export const enableStrictEffects = __DEV__;
 
 // To preserve the "Pause on caught exceptions" behavior of the debugger, we
 // replay the begin phase of a failed component inside invokeGuardedCallback.
@@ -252,7 +221,7 @@ export const enableUpdaterTracking = __PROFILE__;
 
 // Only enabled in RN, related to enableComponentStackLocations
 export const disableNativeComponentFrames = false;
-export const enableServerContext = __EXPERIMENTAL__;
+export const enableServerContext = true;
 
 // Internal only.
 export const enableGetInspectorDataForInstanceInProduction = false;
@@ -262,3 +231,8 @@ export const enableGetInspectorDataForInstanceInProduction = false;
 export const enableProfilerNestedUpdateScheduledHook = false;
 
 export const consoleManagedByDevToolsDuringStrictMode = true;
+
+// Modern <StrictMode /> behaviour aligns more with what components
+// components will encounter in production, especially when used With <Offscreen />.
+// TODO: clean up legacy <StrictMode /> once tests pass WWW.
+export const useModernStrictMode = false;

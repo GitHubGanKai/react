@@ -1,5 +1,5 @@
 /**
- * Copyright (c) Facebook, Inc. and its affiliates.
+ * Copyright (c) Meta Platforms, Inc. and affiliates.
  *
  * This source code is licensed under the MIT license found in the
  * LICENSE file in the root directory of this source tree.
@@ -12,7 +12,7 @@
 const stream = require('stream');
 const shouldIgnoreConsoleError = require('../../../../../scripts/jest/shouldIgnoreConsoleError');
 
-module.exports = function(initModules) {
+module.exports = function (initModules) {
   let ReactDOM;
   let ReactDOMServer;
   let act;
@@ -241,8 +241,10 @@ module.exports = function(initModules) {
     if (shouldUseDocument(element)) {
       // We can't render into a document during a clean render,
       // so instead, we'll render the children into the document element.
-      cleanContainer = getContainerFromMarkup(element, '<html></html>')
-        .documentElement;
+      cleanContainer = getContainerFromMarkup(
+        element,
+        '<html></html>',
+      ).documentElement;
       element = element.props.children;
     } else {
       cleanContainer = document.createElement('div');

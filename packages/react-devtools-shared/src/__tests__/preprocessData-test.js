@@ -1,5 +1,5 @@
 /**
- * Copyright (c) Facebook, Inc. and its affiliates.
+ * Copyright (c) Meta Platforms, Inc. and affiliates.
  *
  * This source code is licensed under the MIT license found in the
  * LICENSE file in the root directory of this source tree.
@@ -8,6 +8,8 @@
  */
 
 'use strict';
+
+import {normalizeCodeLocInfo} from './utils';
 
 describe('Timeline profiler', () => {
   let React;
@@ -80,8 +82,8 @@ describe('Timeline profiler', () => {
       ReactDOMClient = require('react-dom/client');
       Scheduler = require('scheduler');
 
-      setPerformanceMock = require('react-devtools-shared/src/backend/profilingHooks')
-        .setPerformanceMock_ONLY_FOR_TESTING;
+      setPerformanceMock =
+        require('react-devtools-shared/src/backend/profilingHooks').setPerformanceMock_ONLY_FOR_TESTING;
       setPerformanceMock(createUserTimingPolyfill());
 
       const store = global.store;
@@ -103,8 +105,8 @@ describe('Timeline profiler', () => {
       let getLanesFromTransportDecimalBitmask;
 
       beforeEach(() => {
-        getLanesFromTransportDecimalBitmask = require('react-devtools-timeline/src/import-worker/preprocessData')
-          .getLanesFromTransportDecimalBitmask;
+        getLanesFromTransportDecimalBitmask =
+          require('react-devtools-timeline/src/import-worker/preprocessData').getLanesFromTransportDecimalBitmask;
       });
 
       // @reactVersion >= 18.0
@@ -113,11 +115,7 @@ describe('Timeline profiler', () => {
         expect(getLanesFromTransportDecimalBitmask('512')).toEqual([9]);
         expect(getLanesFromTransportDecimalBitmask('3')).toEqual([0, 1]);
         expect(getLanesFromTransportDecimalBitmask('1234')).toEqual([
-          1,
-          4,
-          6,
-          7,
-          10,
+          1, 4, 6, 7, 10,
         ]); // 2 + 16 + 64 + 128 + 1024
         expect(
           getLanesFromTransportDecimalBitmask('1073741824'), // 0b1000000000000000000000000000000
@@ -137,8 +135,8 @@ describe('Timeline profiler', () => {
 
       // @reactVersion >= 18.0
       it('should ignore lanes outside REACT_TOTAL_NUM_LANES', () => {
-        const REACT_TOTAL_NUM_LANES = require('react-devtools-timeline/src/constants')
-          .REACT_TOTAL_NUM_LANES;
+        const REACT_TOTAL_NUM_LANES =
+          require('react-devtools-timeline/src/constants').REACT_TOTAL_NUM_LANES;
 
         // Sanity check; this test may need to be updated when the no. of fiber lanes are changed.
         expect(REACT_TOTAL_NUM_LANES).toBe(31);
@@ -155,8 +153,8 @@ describe('Timeline profiler', () => {
       let preprocessData;
 
       beforeEach(() => {
-        preprocessData = require('react-devtools-timeline/src/import-worker/preprocessData')
-          .default;
+        preprocessData =
+          require('react-devtools-timeline/src/import-worker/preprocessData').default;
       });
 
       // These should be dynamic to mimic a real profile,
@@ -175,8 +173,8 @@ describe('Timeline profiler', () => {
       }
 
       function createProfilerVersionEntry() {
-        const SCHEDULING_PROFILER_VERSION = require('react-devtools-timeline/src/constants')
-          .SCHEDULING_PROFILER_VERSION;
+        const SCHEDULING_PROFILER_VERSION =
+          require('react-devtools-timeline/src/constants').SCHEDULING_PROFILER_VERSION;
         return createUserTimingEntry({
           cat: 'blink.user_timing',
           name: '--profiler-version-' + SCHEDULING_PROFILER_VERSION,
@@ -193,8 +191,7 @@ describe('Timeline profiler', () => {
       function createLaneLabelsEntry() {
         return createUserTimingEntry({
           cat: 'blink.user_timing',
-          name:
-            '--react-lane-labels-Sync,InputContinuousHydration,InputContinuous,DefaultHydration,Default,TransitionHydration,Transition,Transition,Transition,Transition,Transition,Transition,Transition,Transition,Transition,Transition,Transition,Transition,Transition,Transition,Transition,Transition,Retry,Retry,Retry,Retry,Retry,SelectiveHydration,IdleHydration,Idle,Offscreen',
+          name: '--react-lane-labels-Sync,InputContinuousHydration,InputContinuous,DefaultHydration,Default,TransitionHydration,Transition,Transition,Transition,Transition,Transition,Transition,Transition,Transition,Transition,Transition,Transition,Transition,Transition,Transition,Transition,Transition,Retry,Retry,Retry,Retry,Retry,SelectiveHydration,IdleHydration,Idle,Offscreen',
         });
       }
 
@@ -611,7 +608,6 @@ describe('Timeline profiler', () => {
         `);
       });
 
-      // @reactVersion >= 18.0
       it('should process a sample legacy render sequence', async () => {
         utils.legacyRender(<div />, document.createElement('div'));
 
@@ -627,7 +623,7 @@ describe('Timeline profiler', () => {
                   "batchUID": 0,
                   "depth": 0,
                   "duration": 0.01,
-                  "lanes": "0b0000000000000000000000000000000",
+                  "lanes": "0b0000000000000000000000000000001",
                   "timestamp": 0.006,
                   "type": "render-idle",
                 },
@@ -635,7 +631,7 @@ describe('Timeline profiler', () => {
                   "batchUID": 0,
                   "depth": 0,
                   "duration": 0.001,
-                  "lanes": "0b0000000000000000000000000000000",
+                  "lanes": "0b0000000000000000000000000000001",
                   "timestamp": 0.006,
                   "type": "render",
                 },
@@ -643,7 +639,7 @@ describe('Timeline profiler', () => {
                   "batchUID": 0,
                   "depth": 0,
                   "duration": 0.008,
-                  "lanes": "0b0000000000000000000000000000000",
+                  "lanes": "0b0000000000000000000000000000001",
                   "timestamp": 0.008,
                   "type": "commit",
                 },
@@ -651,7 +647,7 @@ describe('Timeline profiler', () => {
                   "batchUID": 0,
                   "depth": 1,
                   "duration": 0.001,
-                  "lanes": "0b0000000000000000000000000000000",
+                  "lanes": "0b0000000000000000000000000000001",
                   "timestamp": 0.014,
                   "type": "layout-effects",
                 },
@@ -712,12 +708,13 @@ describe('Timeline profiler', () => {
               30 => "Offscreen",
             },
             "laneToReactMeasureMap": Map {
-              0 => Array [
+              0 => Array [],
+              1 => Array [
                 Object {
                   "batchUID": 0,
                   "depth": 0,
                   "duration": 0.01,
-                  "lanes": "0b0000000000000000000000000000000",
+                  "lanes": "0b0000000000000000000000000000001",
                   "timestamp": 0.006,
                   "type": "render-idle",
                 },
@@ -725,7 +722,7 @@ describe('Timeline profiler', () => {
                   "batchUID": 0,
                   "depth": 0,
                   "duration": 0.001,
-                  "lanes": "0b0000000000000000000000000000000",
+                  "lanes": "0b0000000000000000000000000000001",
                   "timestamp": 0.006,
                   "type": "render",
                 },
@@ -733,7 +730,7 @@ describe('Timeline profiler', () => {
                   "batchUID": 0,
                   "depth": 0,
                   "duration": 0.008,
-                  "lanes": "0b0000000000000000000000000000000",
+                  "lanes": "0b0000000000000000000000000000001",
                   "timestamp": 0.008,
                   "type": "commit",
                 },
@@ -741,12 +738,11 @@ describe('Timeline profiler', () => {
                   "batchUID": 0,
                   "depth": 1,
                   "duration": 0.001,
-                  "lanes": "0b0000000000000000000000000000000",
+                  "lanes": "0b0000000000000000000000000000001",
                   "timestamp": 0.014,
                   "type": "layout-effects",
                 },
               ],
-              1 => Array [],
               2 => Array [],
               3 => Array [],
               4 => Array [],
@@ -783,7 +779,7 @@ describe('Timeline profiler', () => {
             "reactVersion": "<filtered-version>",
             "schedulingEvents": Array [
               Object {
-                "lanes": "0b0000000000000000000000000000000",
+                "lanes": "0b0000000000000000000000000000001",
                 "timestamp": 0.005,
                 "type": "schedule-render",
                 "warning": null,
@@ -798,7 +794,6 @@ describe('Timeline profiler', () => {
         `);
       });
 
-      // @reactVersion >= 18.0
       it('should process a sample createRoot render sequence', async () => {
         function App() {
           const [didMount, setDidMount] = React.useState(false);
@@ -825,7 +820,7 @@ describe('Timeline profiler', () => {
                   "batchUID": 0,
                   "depth": 0,
                   "duration": 0.012,
-                  "lanes": "0b0000000000000000000000000000100",
+                  "lanes": "0b0000000000000000000000000000101",
                   "timestamp": 0.006,
                   "type": "render-idle",
                 },
@@ -833,7 +828,7 @@ describe('Timeline profiler', () => {
                   "batchUID": 0,
                   "depth": 0,
                   "duration": 0.003,
-                  "lanes": "0b0000000000000000000000000000100",
+                  "lanes": "0b0000000000000000000000000000101",
                   "timestamp": 0.006,
                   "type": "render",
                 },
@@ -841,7 +836,7 @@ describe('Timeline profiler', () => {
                   "batchUID": 0,
                   "depth": 0,
                   "duration": 0.008,
-                  "lanes": "0b0000000000000000000000000000100",
+                  "lanes": "0b0000000000000000000000000000101",
                   "timestamp": 0.01,
                   "type": "commit",
                 },
@@ -849,7 +844,7 @@ describe('Timeline profiler', () => {
                   "batchUID": 0,
                   "depth": 1,
                   "duration": 0.001,
-                  "lanes": "0b0000000000000000000000000000100",
+                  "lanes": "0b0000000000000000000000000000101",
                   "timestamp": 0.016,
                   "type": "layout-effects",
                 },
@@ -857,7 +852,7 @@ describe('Timeline profiler', () => {
                   "batchUID": 0,
                   "depth": 0,
                   "duration": 0.004,
-                  "lanes": "0b0000000000000000000000000000100",
+                  "lanes": "0b0000000000000000000000000000101",
                   "timestamp": 0.019,
                   "type": "passive-effects",
                 },
@@ -867,7 +862,7 @@ describe('Timeline profiler', () => {
                   "batchUID": 1,
                   "depth": 0,
                   "duration": 0.012,
-                  "lanes": "0b0000000000000000000000000000100",
+                  "lanes": "0b0000000000000000000000000000101",
                   "timestamp": 0.024,
                   "type": "render-idle",
                 },
@@ -875,7 +870,7 @@ describe('Timeline profiler', () => {
                   "batchUID": 1,
                   "depth": 0,
                   "duration": 0.003,
-                  "lanes": "0b0000000000000000000000000000100",
+                  "lanes": "0b0000000000000000000000000000101",
                   "timestamp": 0.024,
                   "type": "render",
                 },
@@ -883,7 +878,7 @@ describe('Timeline profiler', () => {
                   "batchUID": 1,
                   "depth": 0,
                   "duration": 0.008,
-                  "lanes": "0b0000000000000000000000000000100",
+                  "lanes": "0b0000000000000000000000000000101",
                   "timestamp": 0.028,
                   "type": "commit",
                 },
@@ -891,7 +886,7 @@ describe('Timeline profiler', () => {
                   "batchUID": 1,
                   "depth": 1,
                   "duration": 0.001,
-                  "lanes": "0b0000000000000000000000000000100",
+                  "lanes": "0b0000000000000000000000000000101",
                   "timestamp": 0.034,
                   "type": "layout-effects",
                 },
@@ -899,7 +894,7 @@ describe('Timeline profiler', () => {
                   "batchUID": 1,
                   "depth": 0,
                   "duration": 0.003,
-                  "lanes": "0b0000000000000000000000000000100",
+                  "lanes": "0b0000000000000000000000000000101",
                   "timestamp": 0.037,
                   "type": "passive-effects",
                 },
@@ -993,12 +988,13 @@ describe('Timeline profiler', () => {
               1 => Array [],
               2 => Array [],
               3 => Array [],
-              4 => Array [
+              4 => Array [],
+              5 => Array [
                 Object {
                   "batchUID": 0,
                   "depth": 0,
                   "duration": 0.012,
-                  "lanes": "0b0000000000000000000000000000100",
+                  "lanes": "0b0000000000000000000000000000101",
                   "timestamp": 0.006,
                   "type": "render-idle",
                 },
@@ -1006,7 +1002,7 @@ describe('Timeline profiler', () => {
                   "batchUID": 0,
                   "depth": 0,
                   "duration": 0.003,
-                  "lanes": "0b0000000000000000000000000000100",
+                  "lanes": "0b0000000000000000000000000000101",
                   "timestamp": 0.006,
                   "type": "render",
                 },
@@ -1014,7 +1010,7 @@ describe('Timeline profiler', () => {
                   "batchUID": 0,
                   "depth": 0,
                   "duration": 0.008,
-                  "lanes": "0b0000000000000000000000000000100",
+                  "lanes": "0b0000000000000000000000000000101",
                   "timestamp": 0.01,
                   "type": "commit",
                 },
@@ -1022,7 +1018,7 @@ describe('Timeline profiler', () => {
                   "batchUID": 0,
                   "depth": 1,
                   "duration": 0.001,
-                  "lanes": "0b0000000000000000000000000000100",
+                  "lanes": "0b0000000000000000000000000000101",
                   "timestamp": 0.016,
                   "type": "layout-effects",
                 },
@@ -1030,7 +1026,7 @@ describe('Timeline profiler', () => {
                   "batchUID": 0,
                   "depth": 0,
                   "duration": 0.004,
-                  "lanes": "0b0000000000000000000000000000100",
+                  "lanes": "0b0000000000000000000000000000101",
                   "timestamp": 0.019,
                   "type": "passive-effects",
                 },
@@ -1038,7 +1034,7 @@ describe('Timeline profiler', () => {
                   "batchUID": 1,
                   "depth": 0,
                   "duration": 0.012,
-                  "lanes": "0b0000000000000000000000000000100",
+                  "lanes": "0b0000000000000000000000000000101",
                   "timestamp": 0.024,
                   "type": "render-idle",
                 },
@@ -1046,7 +1042,7 @@ describe('Timeline profiler', () => {
                   "batchUID": 1,
                   "depth": 0,
                   "duration": 0.003,
-                  "lanes": "0b0000000000000000000000000000100",
+                  "lanes": "0b0000000000000000000000000000101",
                   "timestamp": 0.024,
                   "type": "render",
                 },
@@ -1054,7 +1050,7 @@ describe('Timeline profiler', () => {
                   "batchUID": 1,
                   "depth": 0,
                   "duration": 0.008,
-                  "lanes": "0b0000000000000000000000000000100",
+                  "lanes": "0b0000000000000000000000000000101",
                   "timestamp": 0.028,
                   "type": "commit",
                 },
@@ -1062,7 +1058,7 @@ describe('Timeline profiler', () => {
                   "batchUID": 1,
                   "depth": 1,
                   "duration": 0.001,
-                  "lanes": "0b0000000000000000000000000000100",
+                  "lanes": "0b0000000000000000000000000000101",
                   "timestamp": 0.034,
                   "type": "layout-effects",
                 },
@@ -1070,12 +1066,11 @@ describe('Timeline profiler', () => {
                   "batchUID": 1,
                   "depth": 0,
                   "duration": 0.003,
-                  "lanes": "0b0000000000000000000000000000100",
+                  "lanes": "0b0000000000000000000000000000101",
                   "timestamp": 0.037,
                   "type": "passive-effects",
                 },
               ],
-              5 => Array [],
               6 => Array [],
               7 => Array [],
               8 => Array [],
@@ -1108,14 +1103,14 @@ describe('Timeline profiler', () => {
             "reactVersion": "<filtered-version>",
             "schedulingEvents": Array [
               Object {
-                "lanes": "0b0000000000000000000000000000100",
+                "lanes": "0b0000000000000000000000000000101",
                 "timestamp": 0.005,
                 "type": "schedule-render",
                 "warning": null,
               },
               Object {
                 "componentName": "App",
-                "lanes": "0b0000000000000000000000000000100",
+                "lanes": "0b0000000000000000000000000000101",
                 "timestamp": 0.021,
                 "type": "schedule-state-update",
                 "warning": null,
@@ -1924,7 +1919,7 @@ describe('Timeline profiler', () => {
   });
 
   // Note the in-memory tests vary slightly (e.g. timestamp values, lane numbers) from the above tests.
-  // That's okay; the important thing is the the lane-to-label matches the subsequent events/measures.
+  // That's okay; the important thing is the lane-to-label matches the subsequent events/measures.
   describe('DevTools hook (in memory)', () => {
     let store;
 
@@ -1945,7 +1940,6 @@ describe('Timeline profiler', () => {
       global.IS_REACT_ACT_ENVIRONMENT = true;
     });
 
-    // @reactVersion >= 18.0
     it('should process a sample legacy render sequence', async () => {
       utils.legacyRender(<div />, document.createElement('div'));
       utils.act(() => store.profilerStore.stopProfiling());
@@ -1961,7 +1955,7 @@ describe('Timeline profiler', () => {
                 "batchUID": 1,
                 "depth": 0,
                 "duration": 0,
-                "lanes": "0b0000000000000000000000000000001",
+                "lanes": "0b0000000000000000000000000000010",
                 "timestamp": 10,
                 "type": "render-idle",
               },
@@ -1969,7 +1963,7 @@ describe('Timeline profiler', () => {
                 "batchUID": 1,
                 "depth": 0,
                 "duration": 0,
-                "lanes": "0b0000000000000000000000000000001",
+                "lanes": "0b0000000000000000000000000000010",
                 "timestamp": 10,
                 "type": "render",
               },
@@ -1977,7 +1971,7 @@ describe('Timeline profiler', () => {
                 "batchUID": 1,
                 "depth": 0,
                 "duration": 0,
-                "lanes": "0b0000000000000000000000000000001",
+                "lanes": "0b0000000000000000000000000000010",
                 "timestamp": 10,
                 "type": "commit",
               },
@@ -1985,7 +1979,7 @@ describe('Timeline profiler', () => {
                 "batchUID": 1,
                 "depth": 1,
                 "duration": 0,
-                "lanes": "0b0000000000000000000000000000001",
+                "lanes": "0b0000000000000000000000000000010",
                 "timestamp": 10,
                 "type": "layout-effects",
               },
@@ -1996,13 +1990,13 @@ describe('Timeline profiler', () => {
           "flamechart": Array [],
           "internalModuleSourceToRanges": Map {},
           "laneToLabelMap": Map {
-            1 => "Sync",
-            2 => "InputContinuousHydration",
-            4 => "InputContinuous",
-            8 => "DefaultHydration",
-            16 => "Default",
-            32 => "TransitionHydration",
-            64 => "Transition",
+            1 => "SyncHydrationLane",
+            2 => "Sync",
+            4 => "InputContinuousHydration",
+            8 => "InputContinuous",
+            16 => "DefaultHydration",
+            32 => "Default",
+            64 => "TransitionHydration",
             128 => "Transition",
             256 => "Transition",
             512 => "Transition",
@@ -2018,7 +2012,7 @@ describe('Timeline profiler', () => {
             524288 => "Transition",
             1048576 => "Transition",
             2097152 => "Transition",
-            4194304 => "Retry",
+            4194304 => "Transition",
             8388608 => "Retry",
             16777216 => "Retry",
             33554432 => "Retry",
@@ -2029,12 +2023,13 @@ describe('Timeline profiler', () => {
             1073741824 => "Offscreen",
           },
           "laneToReactMeasureMap": Map {
-            1 => Array [
+            1 => Array [],
+            2 => Array [
               Object {
                 "batchUID": 1,
                 "depth": 0,
                 "duration": 0,
-                "lanes": "0b0000000000000000000000000000001",
+                "lanes": "0b0000000000000000000000000000010",
                 "timestamp": 10,
                 "type": "render-idle",
               },
@@ -2042,7 +2037,7 @@ describe('Timeline profiler', () => {
                 "batchUID": 1,
                 "depth": 0,
                 "duration": 0,
-                "lanes": "0b0000000000000000000000000000001",
+                "lanes": "0b0000000000000000000000000000010",
                 "timestamp": 10,
                 "type": "render",
               },
@@ -2050,7 +2045,7 @@ describe('Timeline profiler', () => {
                 "batchUID": 1,
                 "depth": 0,
                 "duration": 0,
-                "lanes": "0b0000000000000000000000000000001",
+                "lanes": "0b0000000000000000000000000000010",
                 "timestamp": 10,
                 "type": "commit",
               },
@@ -2058,12 +2053,11 @@ describe('Timeline profiler', () => {
                 "batchUID": 1,
                 "depth": 1,
                 "duration": 0,
-                "lanes": "0b0000000000000000000000000000001",
+                "lanes": "0b0000000000000000000000000000010",
                 "timestamp": 10,
                 "type": "layout-effects",
               },
             ],
-            2 => Array [],
             4 => Array [],
             8 => Array [],
             16 => Array [],
@@ -2100,7 +2094,7 @@ describe('Timeline profiler', () => {
           "reactVersion": "<filtered-version>",
           "schedulingEvents": Array [
             Object {
-              "lanes": "0b0000000000000000000000000000001",
+              "lanes": "0b0000000000000000000000000000010",
               "timestamp": 10,
               "type": "schedule-render",
               "warning": null,
@@ -2115,7 +2109,6 @@ describe('Timeline profiler', () => {
       `);
     });
 
-    // @reactVersion >= 18.0
     it('should process a sample createRoot render sequence', async () => {
       function App() {
         const [didMount, setDidMount] = React.useState(false);
@@ -2134,6 +2127,15 @@ describe('Timeline profiler', () => {
       const data = store.profilerStore.profilingData?.timelineData;
       expect(data).toHaveLength(1);
       const timelineData = data[0];
+
+      // normalize the location for component stack source
+      // for snapshot testing
+      timelineData.schedulingEvents.forEach(event => {
+        if (event.componentStack) {
+          event.componentStack = normalizeCodeLocInfo(event.componentStack);
+        }
+      });
+
       expect(timelineData).toMatchInlineSnapshot(`
         Object {
           "batchUIDToMeasuresMap": Map {
@@ -2142,7 +2144,7 @@ describe('Timeline profiler', () => {
                 "batchUID": 1,
                 "depth": 0,
                 "duration": 0,
-                "lanes": "0b0000000000000000000000000010000",
+                "lanes": "0b0000000000000000000000000100000",
                 "timestamp": 10,
                 "type": "render-idle",
               },
@@ -2150,7 +2152,7 @@ describe('Timeline profiler', () => {
                 "batchUID": 1,
                 "depth": 0,
                 "duration": 0,
-                "lanes": "0b0000000000000000000000000010000",
+                "lanes": "0b0000000000000000000000000100000",
                 "timestamp": 10,
                 "type": "render",
               },
@@ -2158,7 +2160,7 @@ describe('Timeline profiler', () => {
                 "batchUID": 1,
                 "depth": 0,
                 "duration": 0,
-                "lanes": "0b0000000000000000000000000010000",
+                "lanes": "0b0000000000000000000000000100000",
                 "timestamp": 10,
                 "type": "commit",
               },
@@ -2166,7 +2168,7 @@ describe('Timeline profiler', () => {
                 "batchUID": 1,
                 "depth": 1,
                 "duration": 0,
-                "lanes": "0b0000000000000000000000000010000",
+                "lanes": "0b0000000000000000000000000100000",
                 "timestamp": 10,
                 "type": "layout-effects",
               },
@@ -2174,7 +2176,7 @@ describe('Timeline profiler', () => {
                 "batchUID": 1,
                 "depth": 0,
                 "duration": 0,
-                "lanes": "0b0000000000000000000000000010000",
+                "lanes": "0b0000000000000000000000000100000",
                 "timestamp": 10,
                 "type": "passive-effects",
               },
@@ -2184,7 +2186,7 @@ describe('Timeline profiler', () => {
                 "batchUID": 2,
                 "depth": 0,
                 "duration": 0,
-                "lanes": "0b0000000000000000000000000010000",
+                "lanes": "0b0000000000000000000000000100000",
                 "timestamp": 10,
                 "type": "render-idle",
               },
@@ -2192,7 +2194,7 @@ describe('Timeline profiler', () => {
                 "batchUID": 2,
                 "depth": 0,
                 "duration": 0,
-                "lanes": "0b0000000000000000000000000010000",
+                "lanes": "0b0000000000000000000000000100000",
                 "timestamp": 10,
                 "type": "render",
               },
@@ -2200,7 +2202,7 @@ describe('Timeline profiler', () => {
                 "batchUID": 2,
                 "depth": 0,
                 "duration": 0,
-                "lanes": "0b0000000000000000000000000010000",
+                "lanes": "0b0000000000000000000000000100000",
                 "timestamp": 10,
                 "type": "commit",
               },
@@ -2208,7 +2210,7 @@ describe('Timeline profiler', () => {
                 "batchUID": 2,
                 "depth": 1,
                 "duration": 0,
-                "lanes": "0b0000000000000000000000000010000",
+                "lanes": "0b0000000000000000000000000100000",
                 "timestamp": 10,
                 "type": "layout-effects",
               },
@@ -2216,7 +2218,7 @@ describe('Timeline profiler', () => {
                 "batchUID": 2,
                 "depth": 0,
                 "duration": 0,
-                "lanes": "0b0000000000000000000000000010000",
+                "lanes": "0b0000000000000000000000000100000",
                 "timestamp": 10,
                 "type": "passive-effects",
               },
@@ -2256,13 +2258,13 @@ describe('Timeline profiler', () => {
           "flamechart": Array [],
           "internalModuleSourceToRanges": Map {},
           "laneToLabelMap": Map {
-            1 => "Sync",
-            2 => "InputContinuousHydration",
-            4 => "InputContinuous",
-            8 => "DefaultHydration",
-            16 => "Default",
-            32 => "TransitionHydration",
-            64 => "Transition",
+            1 => "SyncHydrationLane",
+            2 => "Sync",
+            4 => "InputContinuousHydration",
+            8 => "InputContinuous",
+            16 => "DefaultHydration",
+            32 => "Default",
+            64 => "TransitionHydration",
             128 => "Transition",
             256 => "Transition",
             512 => "Transition",
@@ -2278,7 +2280,7 @@ describe('Timeline profiler', () => {
             524288 => "Transition",
             1048576 => "Transition",
             2097152 => "Transition",
-            4194304 => "Retry",
+            4194304 => "Transition",
             8388608 => "Retry",
             16777216 => "Retry",
             33554432 => "Retry",
@@ -2293,12 +2295,13 @@ describe('Timeline profiler', () => {
             2 => Array [],
             4 => Array [],
             8 => Array [],
-            16 => Array [
+            16 => Array [],
+            32 => Array [
               Object {
                 "batchUID": 1,
                 "depth": 0,
                 "duration": 0,
-                "lanes": "0b0000000000000000000000000010000",
+                "lanes": "0b0000000000000000000000000100000",
                 "timestamp": 10,
                 "type": "render-idle",
               },
@@ -2306,7 +2309,7 @@ describe('Timeline profiler', () => {
                 "batchUID": 1,
                 "depth": 0,
                 "duration": 0,
-                "lanes": "0b0000000000000000000000000010000",
+                "lanes": "0b0000000000000000000000000100000",
                 "timestamp": 10,
                 "type": "render",
               },
@@ -2314,7 +2317,7 @@ describe('Timeline profiler', () => {
                 "batchUID": 1,
                 "depth": 0,
                 "duration": 0,
-                "lanes": "0b0000000000000000000000000010000",
+                "lanes": "0b0000000000000000000000000100000",
                 "timestamp": 10,
                 "type": "commit",
               },
@@ -2322,7 +2325,7 @@ describe('Timeline profiler', () => {
                 "batchUID": 1,
                 "depth": 1,
                 "duration": 0,
-                "lanes": "0b0000000000000000000000000010000",
+                "lanes": "0b0000000000000000000000000100000",
                 "timestamp": 10,
                 "type": "layout-effects",
               },
@@ -2330,7 +2333,7 @@ describe('Timeline profiler', () => {
                 "batchUID": 1,
                 "depth": 0,
                 "duration": 0,
-                "lanes": "0b0000000000000000000000000010000",
+                "lanes": "0b0000000000000000000000000100000",
                 "timestamp": 10,
                 "type": "passive-effects",
               },
@@ -2338,7 +2341,7 @@ describe('Timeline profiler', () => {
                 "batchUID": 2,
                 "depth": 0,
                 "duration": 0,
-                "lanes": "0b0000000000000000000000000010000",
+                "lanes": "0b0000000000000000000000000100000",
                 "timestamp": 10,
                 "type": "render-idle",
               },
@@ -2346,7 +2349,7 @@ describe('Timeline profiler', () => {
                 "batchUID": 2,
                 "depth": 0,
                 "duration": 0,
-                "lanes": "0b0000000000000000000000000010000",
+                "lanes": "0b0000000000000000000000000100000",
                 "timestamp": 10,
                 "type": "render",
               },
@@ -2354,7 +2357,7 @@ describe('Timeline profiler', () => {
                 "batchUID": 2,
                 "depth": 0,
                 "duration": 0,
-                "lanes": "0b0000000000000000000000000010000",
+                "lanes": "0b0000000000000000000000000100000",
                 "timestamp": 10,
                 "type": "commit",
               },
@@ -2362,7 +2365,7 @@ describe('Timeline profiler', () => {
                 "batchUID": 2,
                 "depth": 1,
                 "duration": 0,
-                "lanes": "0b0000000000000000000000000010000",
+                "lanes": "0b0000000000000000000000000100000",
                 "timestamp": 10,
                 "type": "layout-effects",
               },
@@ -2370,12 +2373,11 @@ describe('Timeline profiler', () => {
                 "batchUID": 2,
                 "depth": 0,
                 "duration": 0,
-                "lanes": "0b0000000000000000000000000010000",
+                "lanes": "0b0000000000000000000000000100000",
                 "timestamp": 10,
                 "type": "passive-effects",
               },
             ],
-            32 => Array [],
             64 => Array [],
             128 => Array [],
             256 => Array [],
@@ -2408,14 +2410,16 @@ describe('Timeline profiler', () => {
           "reactVersion": "<filtered-version>",
           "schedulingEvents": Array [
             Object {
-              "lanes": "0b0000000000000000000000000010000",
+              "lanes": "0b0000000000000000000000000100000",
               "timestamp": 10,
               "type": "schedule-render",
               "warning": null,
             },
             Object {
               "componentName": "App",
-              "lanes": "0b0000000000000000000000000010000",
+              "componentStack": "
+            in App (at **)",
+              "lanes": "0b0000000000000000000000000100000",
               "timestamp": 10,
               "type": "schedule-state-update",
               "warning": null,

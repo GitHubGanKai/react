@@ -1,5 +1,5 @@
 /**
- * Copyright (c) Facebook, Inc. and its affiliates.
+ * Copyright (c) Meta Platforms, Inc. and affiliates.
  *
  * This source code is licensed under the MIT license found in the
  * LICENSE file in the root directory of this source tree.
@@ -27,7 +27,7 @@ import type {TooltipFiberData} from './HoveredFiberInfo';
 import type {ChartData, ChartNode} from './FlamegraphChartBuilder';
 import type {CommitTree} from './types';
 
-export type ItemData = {|
+export type ItemData = {
   chartData: ChartData,
   onElementMouseEnter: (fiberData: TooltipFiberData) => void,
   onElementMouseLeave: () => void,
@@ -36,13 +36,12 @@ export type ItemData = {|
   selectedChartNodeIndex: number,
   selectFiber: (id: number | null, name: string | null) => void,
   width: number,
-|};
+};
 
-export default function CommitFlamegraphAutoSizer(_: {||}) {
+export default function CommitFlamegraphAutoSizer(_: {}): React.Node {
   const {profilerStore} = useContext(StoreContext);
-  const {rootID, selectedCommitIndex, selectFiber} = useContext(
-    ProfilerContext,
-  );
+  const {rootID, selectedCommitIndex, selectFiber} =
+    useContext(ProfilerContext);
   const {profilingCache} = profilerStore;
 
   const deselectCurrentFiber = useCallback(
@@ -90,24 +89,20 @@ export default function CommitFlamegraphAutoSizer(_: {||}) {
   }
 }
 
-type Props = {|
+type Props = {
   chartData: ChartData,
   commitTree: CommitTree,
   height: number,
   width: number,
-|};
+};
 
 function CommitFlamegraph({chartData, commitTree, height, width}: Props) {
-  const [
-    hoveredFiberData,
-    setHoveredFiberData,
-  ] = useState<TooltipFiberData | null>(null);
+  const [hoveredFiberData, setHoveredFiberData] =
+    useState<TooltipFiberData | null>(null);
   const {lineHeight} = useContext(SettingsContext);
   const {selectFiber, selectedFiberID} = useContext(ProfilerContext);
-  const {
-    highlightNativeElement,
-    clearHighlightNativeElement,
-  } = useHighlightNativeElement();
+  const {highlightNativeElement, clearHighlightNativeElement} =
+    useHighlightNativeElement();
 
   const selectedChartNodeIndex = useMemo<number>(() => {
     if (selectedFiberID === null) {

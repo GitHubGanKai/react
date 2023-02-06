@@ -1,5 +1,5 @@
 /**
- * Copyright (c) Facebook, Inc. and its affiliates.
+ * Copyright (c) Meta Platforms, Inc. and affiliates.
  *
  * This source code is licensed under the MIT license found in the
  * LICENSE file in the root directory of this source tree.
@@ -454,7 +454,13 @@ describe('useSubscription', () => {
       observableA.next('a-2');
 
       // Update again
-      renderer.update(<Parent observed={observableA} />);
+      if (gate(flags => flags.enableUnifiedSyncLane)) {
+        React.startTransition(() => {
+          renderer.update(<Parent observed={observableA} />);
+        });
+      } else {
+        renderer.update(<Parent observed={observableA} />);
+      }
 
       // Flush everything and ensure that the correct subscribable is used
       expect(Scheduler).toFlushAndYield([

@@ -1,5 +1,5 @@
 /**
- * Copyright (c) Facebook, Inc. and its affiliates.
+ * Copyright (c) Meta Platforms, Inc. and affiliates.
  *
  * This source code is licensed under the MIT license found in the
  * LICENSE file in the root directory of this source tree.
@@ -59,8 +59,8 @@ describe('ReactHooksWithNoopRenderer', () => {
     useTransition = React.useTransition;
     useDeferredValue = React.useDeferredValue;
     Suspense = React.Suspense;
-    ContinuousEventPriority = require('react-reconciler/constants')
-      .ContinuousEventPriority;
+    ContinuousEventPriority =
+      require('react-reconciler/constants').ContinuousEventPriority;
     if (gate(flags => flags.enableSuspenseList)) {
       SuspenseList = React.SuspenseList;
     }
@@ -815,7 +815,13 @@ describe('ReactHooksWithNoopRenderer', () => {
         ReactNoop.discreteUpdates(() => {
           setRow(5);
         });
-        setRow(20);
+        if (gate(flags => flags.enableSyncDefaultUpdates)) {
+          React.startTransition(() => {
+            setRow(20);
+          });
+        } else {
+          setRow(20);
+        }
       });
       expect(Scheduler).toHaveYielded(['Up', 'Down']);
       expect(root).toMatchRenderedOutput(<span prop="Down" />);
@@ -955,11 +961,15 @@ describe('ReactHooksWithNoopRenderer', () => {
       ReactNoop.flushSync(() => {
         counter.current.dispatch(INCREMENT);
       });
-      expect(Scheduler).toHaveYielded(['Count: 1']);
-      expect(ReactNoop.getChildren()).toEqual([span('Count: 1')]);
-
-      expect(Scheduler).toFlushAndYield(['Count: 4']);
-      expect(ReactNoop.getChildren()).toEqual([span('Count: 4')]);
+      if (gate(flags => flags.enableUnifiedSyncLane)) {
+        expect(Scheduler).toHaveYielded(['Count: 4']);
+        expect(ReactNoop.getChildren()).toEqual([span('Count: 4')]);
+      } else {
+        expect(Scheduler).toHaveYielded(['Count: 1']);
+        expect(ReactNoop.getChildren()).toEqual([span('Count: 1')]);
+        expect(Scheduler).toFlushAndYield(['Count: 4']);
+        expect(ReactNoop.getChildren()).toEqual([span('Count: 4')]);
+      }
     });
   });
 
@@ -1717,11 +1727,15 @@ describe('ReactHooksWithNoopRenderer', () => {
       // As a result we, somewhat surprisingly, commit them in the opposite order.
       // This should be fine because any non-discrete set of work doesn't guarantee order
       // and easily could've happened slightly later too.
-      expect(Scheduler).toHaveYielded([
-        'Will set count to 1',
-        'Count: 2',
-        'Count: 1',
-      ]);
+      if (gate(flags => flags.enableUnifiedSyncLane)) {
+        expect(Scheduler).toHaveYielded(['Will set count to 1', 'Count: 1']);
+      } else {
+        expect(Scheduler).toHaveYielded([
+          'Will set count to 1',
+          'Count: 2',
+          'Count: 1',
+        ]);
+      }
 
       expect(ReactNoop.getChildren()).toEqual([span('Count: 1')]);
     });
@@ -1777,7 +1791,7 @@ describe('ReactHooksWithNoopRenderer', () => {
         }, [props.count]);
         return <Text text={'Count: ' + count} />;
       }
-      expect(() =>
+      expect(() => {
         act(() => {
           ReactNoop.render(<Counter count={0} />, () =>
             Scheduler.unstable_yieldValue('Sync effect'),
@@ -1787,8 +1801,8 @@ describe('ReactHooksWithNoopRenderer', () => {
             'Sync effect',
           ]);
           expect(ReactNoop.getChildren()).toEqual([span('Count: (empty)')]);
-        }),
-      ).toErrorDev('flushSync was called from inside a lifecycle method');
+        });
+      }).toErrorDev('flushSync was called from inside a lifecycle method');
       expect(ReactNoop.getChildren()).toEqual([span('Count: 0')]);
     });
 
@@ -2303,7 +2317,7 @@ describe('ReactHooksWithNoopRenderer', () => {
       let LogOnlyErrorBoundary;
 
       beforeEach(() => {
-        BrokenUseEffectCleanup = function() {
+        BrokenUseEffectCleanup = function () {
           useEffect(() => {
             Scheduler.unstable_yieldValue('BrokenUseEffectCleanup useEffect');
             return () => {
@@ -2648,32 +2662,32 @@ describe('ReactHooksWithNoopRenderer', () => {
       }
 
       const root1 = ReactNoop.createRoot();
-      expect(() =>
+      expect(() => {
         act(() => {
           root1.render(<App return={17} />);
-        }),
-      ).toErrorDev([
+        });
+      }).toErrorDev([
         'Warning: useEffect must not return anything besides a ' +
           'function, which is used for clean-up. You returned: 17',
       ]);
 
       const root2 = ReactNoop.createRoot();
-      expect(() =>
+      expect(() => {
         act(() => {
           root2.render(<App return={null} />);
-        }),
-      ).toErrorDev([
+        });
+      }).toErrorDev([
         'Warning: useEffect must not return anything besides a ' +
           'function, which is used for clean-up. You returned null. If your ' +
           'effect does not require clean up, return undefined (or nothing).',
       ]);
 
       const root3 = ReactNoop.createRoot();
-      expect(() =>
+      expect(() => {
         act(() => {
           root3.render(<App return={Promise.resolve()} />);
-        }),
-      ).toErrorDev([
+        });
+      }).toErrorDev([
         'Warning: useEffect must not return anything besides a ' +
           'function, which is used for clean-up.\n\n' +
           'It looks like you wrote useEffect(async () => ...) or returned a Promise.',
@@ -3052,32 +3066,32 @@ describe('ReactHooksWithNoopRenderer', () => {
       }
 
       const root1 = ReactNoop.createRoot();
-      expect(() =>
+      expect(() => {
         act(() => {
           root1.render(<App return={17} />);
-        }),
-      ).toErrorDev([
+        });
+      }).toErrorDev([
         'Warning: useInsertionEffect must not return anything besides a ' +
           'function, which is used for clean-up. You returned: 17',
       ]);
 
       const root2 = ReactNoop.createRoot();
-      expect(() =>
+      expect(() => {
         act(() => {
           root2.render(<App return={null} />);
-        }),
-      ).toErrorDev([
+        });
+      }).toErrorDev([
         'Warning: useInsertionEffect must not return anything besides a ' +
           'function, which is used for clean-up. You returned null. If your ' +
           'effect does not require clean up, return undefined (or nothing).',
       ]);
 
       const root3 = ReactNoop.createRoot();
-      expect(() =>
+      expect(() => {
         act(() => {
           root3.render(<App return={Promise.resolve()} />);
-        }),
-      ).toErrorDev([
+        });
+      }).toErrorDev([
         'Warning: useInsertionEffect must not return anything besides a ' +
           'function, which is used for clean-up.\n\n' +
           'It looks like you wrote useInsertionEffect(async () => ...) or returned a Promise.',
@@ -3104,11 +3118,11 @@ describe('ReactHooksWithNoopRenderer', () => {
       }
 
       const root = ReactNoop.createRoot();
-      expect(() =>
+      expect(() => {
         act(() => {
           root.render(<App />);
-        }),
-      ).toErrorDev(['Warning: useInsertionEffect must not schedule updates.']);
+        });
+      }).toErrorDev(['Warning: useInsertionEffect must not schedule updates.']);
 
       expect(() => {
         act(() => {
@@ -3359,32 +3373,32 @@ describe('ReactHooksWithNoopRenderer', () => {
       }
 
       const root1 = ReactNoop.createRoot();
-      expect(() =>
+      expect(() => {
         act(() => {
           root1.render(<App return={17} />);
-        }),
-      ).toErrorDev([
+        });
+      }).toErrorDev([
         'Warning: useLayoutEffect must not return anything besides a ' +
           'function, which is used for clean-up. You returned: 17',
       ]);
 
       const root2 = ReactNoop.createRoot();
-      expect(() =>
+      expect(() => {
         act(() => {
           root2.render(<App return={null} />);
-        }),
-      ).toErrorDev([
+        });
+      }).toErrorDev([
         'Warning: useLayoutEffect must not return anything besides a ' +
           'function, which is used for clean-up. You returned null. If your ' +
           'effect does not require clean up, return undefined (or nothing).',
       ]);
 
       const root3 = ReactNoop.createRoot();
-      expect(() =>
+      expect(() => {
         act(() => {
           root3.render(<App return={Promise.resolve()} />);
-        }),
-      ).toErrorDev([
+        });
+      }).toErrorDev([
         'Warning: useLayoutEffect must not return anything besides a ' +
           'function, which is used for clean-up.\n\n' +
           'It looks like you wrote useLayoutEffect(async () => ...) or returned a Promise.',
@@ -3412,9 +3426,10 @@ describe('ReactHooksWithNoopRenderer', () => {
 
       function Counter({incrementBy}) {
         const [count, updateCount] = useState(0);
-        const increment = useCallback(() => updateCount(c => c + incrementBy), [
-          incrementBy,
-        ]);
+        const increment = useCallback(
+          () => updateCount(c => c + incrementBy),
+          [incrementBy],
+        );
         return (
           <>
             <IncrementButton increment={increment} ref={button} />
@@ -3523,9 +3538,10 @@ describe('ReactHooksWithNoopRenderer', () => {
 
     it('should not invoke memoized function during re-renders unless inputs change', () => {
       function LazyCompute(props) {
-        const computed = useMemo(() => props.compute(props.input), [
-          props.input,
-        ]);
+        const computed = useMemo(
+          () => props.compute(props.input),
+          [props.input],
+        );
         const [count, setCount] = useState(0);
         if (count < 3) {
           setCount(count + 1);

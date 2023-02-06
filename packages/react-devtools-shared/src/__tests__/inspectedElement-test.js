@@ -1,5 +1,5 @@
 /**
- * Copyright (c) Facebook, Inc. and its affiliates.
+ * Copyright (c) Meta Platforms, Inc. and affiliates.
  *
  * This source code is licensed under the MIT license found in the
  * LICENSE file in the root directory of this source tree.
@@ -59,18 +59,18 @@ describe('InspectedElement', () => {
     TestRenderer = utils.requireTestRenderer();
     TestRendererAct = require('jest-react').act;
 
-    BridgeContext = require('react-devtools-shared/src/devtools/views/context')
-      .BridgeContext;
-    InspectedElementContext = require('react-devtools-shared/src/devtools/views/Components/InspectedElementContext')
-      .InspectedElementContext;
-    InspectedElementContextController = require('react-devtools-shared/src/devtools/views/Components/InspectedElementContext')
-      .InspectedElementContextController;
-    SettingsContextController = require('react-devtools-shared/src/devtools/views/Settings/SettingsContext')
-      .SettingsContextController;
-    StoreContext = require('react-devtools-shared/src/devtools/views/context')
-      .StoreContext;
-    TreeContextController = require('react-devtools-shared/src/devtools/views/Components/TreeContext')
-      .TreeContextController;
+    BridgeContext =
+      require('react-devtools-shared/src/devtools/views/context').BridgeContext;
+    InspectedElementContext =
+      require('react-devtools-shared/src/devtools/views/Components/InspectedElementContext').InspectedElementContext;
+    InspectedElementContextController =
+      require('react-devtools-shared/src/devtools/views/Components/InspectedElementContext').InspectedElementContextController;
+    SettingsContextController =
+      require('react-devtools-shared/src/devtools/views/Settings/SettingsContext').SettingsContextController;
+    StoreContext =
+      require('react-devtools-shared/src/devtools/views/context').StoreContext;
+    TreeContextController =
+      require('react-devtools-shared/src/devtools/views/Components/TreeContext').TreeContextController;
 
     // Used by inspectElementAtIndex() helper function
     utils.act(() => {
@@ -616,8 +616,8 @@ describe('InspectedElement', () => {
     const instance = new Class();
 
     const proxyInstance = new Proxy(() => {}, {
-      get: function(_, name) {
-        return function() {
+      get: function (_, name) {
+        return function () {
           return null;
         };
       },
@@ -889,7 +889,7 @@ describe('InspectedElement', () => {
     `);
   });
 
-  it('should support objects with with inherited keys', async () => {
+  it('should support objects with inherited keys', async () => {
     const Example = () => null;
 
     const base = Object.create(Object.prototype, {
@@ -1777,7 +1777,8 @@ describe('InspectedElement', () => {
       ),
     );
 
-    let copyPath: CopyInspectedElementPath = ((null: any): CopyInspectedElementPath);
+    let copyPath: CopyInspectedElementPath =
+      ((null: any): CopyInspectedElementPath);
 
     const id = ((store.getElementIDAtIndex(0): any): number);
     await inspectElementAtIndex(0, () => {
@@ -1864,7 +1865,8 @@ describe('InspectedElement', () => {
 
     const id = ((store.getElementIDAtIndex(0): any): number);
 
-    let copyPath: CopyInspectedElementPath = ((null: any): CopyInspectedElementPath);
+    let copyPath: CopyInspectedElementPath =
+      ((null: any): CopyInspectedElementPath);
 
     await inspectElementAtIndex(0, () => {
       copyPath = (path: Array<string | number>) => {

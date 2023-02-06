@@ -1,5 +1,5 @@
 /**
- * Copyright (c) Facebook, Inc. and its affiliates.
+ * Copyright (c) Meta Platforms, Inc. and affiliates.
  *
  * This source code is licensed under the MIT license found in the
  * LICENSE file in the root directory of this source tree.
@@ -14,7 +14,7 @@ import isArray from 'shared/isArray';
 import type {JSResourceReference} from 'JSResourceReference';
 import JSResourceReferenceImpl from 'JSResourceReferenceImpl';
 
-export type ModuleReference<T> = JSResourceReference<T>;
+export type ClientReference<T> = JSResourceReference<T>;
 
 import type {
   Destination,
@@ -36,13 +36,15 @@ export type {
   ModuleMetaData,
 } from 'ReactFlightNativeRelayServerIntegration';
 
-export function isModuleReference(reference: Object): boolean {
+export function isClientReference(reference: Object): boolean {
   return reference instanceof JSResourceReferenceImpl;
 }
 
-export type ModuleKey = ModuleReference<any>;
+export type ClientReferenceKey = ClientReference<any>;
 
-export function getModuleKey(reference: ModuleReference<any>): ModuleKey {
+export function getClientReferenceKey(
+  reference: ClientReference<any>,
+): ClientReferenceKey {
   // We use the reference object itself as the key because we assume the
   // object will be cached by the bundler runtime.
   return reference;
@@ -50,23 +52,54 @@ export function getModuleKey(reference: ModuleReference<any>): ModuleKey {
 
 export function resolveModuleMetaData<T>(
   config: BundlerConfig,
-  resource: ModuleReference<T>,
+  resource: ClientReference<T>,
 ): ModuleMetaData {
   return resolveModuleMetaDataImpl(config, resource);
 }
 
 export type Chunk = RowEncoding;
 
-export function processErrorChunk(
+export function processErrorChunkProd(
   request: Request,
   id: number,
-  message: string,
-  stack: string,
+  digest: string,
 ): Chunk {
+  if (__DEV__) {
+    // These errors should never make it into a build so we don't need to encode them in codes.json
+    // eslint-disable-next-line react-internal/prod-error-codes
+    throw new Error(
+      'processErrorChunkProd should never be called while in development mode. Use processErrorChunkDev instead. This is a bug in React.',
+    );
+  }
+
   return [
     'E',
     id,
     {
+      digest,
+    },
+  ];
+}
+export function processErrorChunkDev(
+  request: Request,
+  id: number,
+  digest: string,
+  message: string,
+  stack: string,
+): Chunk {
+  if (!__DEV__) {
+    // These errors should never make it into a build so we don't need to encode them in codes.json
+    // eslint-disable-next-line react-internal/prod-error-codes
+    throw new Error(
+      'processErrorChunkDev should never be called while in production mode. Use processErrorChunkProd instead. This is a bug in React.',
+    );
+  }
+
+  return [
+    'E',
+    id,
+    {
+      digest,
       message,
       stack,
     },
@@ -88,6 +121,7 @@ function convertModelToJSON(
       }
       return jsonArray;
     } else {
+      // $FlowFixMe no good way to define an empty exact object
       const jsonObj: {[key: string]: JSONValue} = {};
       for (const nextKey in json) {
         if (hasOwnProperty.call(json, nextKey)) {
@@ -110,8 +144,17 @@ export function processModelChunk(
   id: number,
   model: ReactModel,
 ): Chunk {
+  // $FlowFixMe no good way to define an empty exact object
   const json = convertModelToJSON(request, {}, '', model);
-  return ['J', id, json];
+  return ['O', id, json];
+}
+
+export function processReferenceChunk(
+  request: Request,
+  id: number,
+  reference: string,
+): Chunk {
+  return ['O', id, reference];
 }
 
 export function processModuleChunk(
@@ -120,23 +163,7 @@ export function processModuleChunk(
   moduleMetaData: ModuleMetaData,
 ): Chunk {
   // The moduleMetaData is already a JSON serializable value.
-  return ['M', id, moduleMetaData];
-}
-
-export function processProviderChunk(
-  request: Request,
-  id: number,
-  contextName: string,
-): Chunk {
-  return ['P', id, contextName];
-}
-
-export function processSymbolChunk(
-  request: Request,
-  id: number,
-  name: string,
-): Chunk {
-  return ['S', id, name];
+  return ['I', id, moduleMetaData];
 }
 
 export function scheduleWork(callback: () => void) {
@@ -145,9 +172,14 @@ export function scheduleWork(callback: () => void) {
 
 export function flushBuffered(destination: Destination) {}
 
+export const supportsRequestStorage = false;
+export const requestStorage: AsyncLocalStorage<Map<Function, mixed>> =
+  (null: any);
+
 export function beginWriting(destination: Destination) {}
 
 export function writeChunk(destination: Destination, chunk: Chunk): void {
+  // $FlowFixMe `Chunk` doesn't flow into `JSONValue` because of the `E` row type.
   emitRow(destination, chunk);
 }
 
@@ -155,6 +187,7 @@ export function writeChunkAndReturn(
   destination: Destination,
   chunk: Chunk,
 ): boolean {
+  // $FlowFixMe `Chunk` doesn't flow into `JSONValue` because of the `E` row type.
   emitRow(destination, chunk);
   return true;
 }

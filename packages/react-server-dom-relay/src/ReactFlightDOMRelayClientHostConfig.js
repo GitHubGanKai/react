@@ -1,5 +1,5 @@
 /**
- * Copyright (c) Facebook, Inc. and its affiliates.
+ * Copyright (c) Meta Platforms, Inc. and affiliates.
  *
  * This source code is licensed under the MIT license found in the
  * LICENSE file in the root directory of this source tree.
@@ -13,7 +13,7 @@ import type {JSResourceReference} from 'JSResourceReference';
 
 import type {ModuleMetaData} from 'ReactFlightDOMRelayClientIntegration';
 
-export type ModuleReference<T> = JSResourceReference<T>;
+export type ClientReference<T> = JSResourceReference<T>;
 
 import {
   parseModelString,
@@ -25,7 +25,7 @@ export {
   requireModule,
 } from 'ReactFlightDOMRelayClientIntegration';
 
-import {resolveModuleReference as resolveModuleReferenceImpl} from 'ReactFlightDOMRelayClientIntegration';
+import {resolveClientReference as resolveClientReferenceImpl} from 'ReactFlightDOMRelayClientIntegration';
 
 import isArray from 'shared/isArray';
 
@@ -37,16 +37,17 @@ export type UninitializedModel = JSONValue;
 
 export type Response = ResponseBase;
 
-export function resolveModuleReference<T>(
+export function resolveClientReference<T>(
   bundlerConfig: BundlerConfig,
   moduleData: ModuleMetaData,
-): ModuleReference<T> {
-  return resolveModuleReferenceImpl(moduleData);
+): ClientReference<T> {
+  return resolveClientReferenceImpl(moduleData);
 }
 
-function parseModelRecursively(response: Response, parentObj, value) {
+// $FlowFixMe[missing-local-annot]
+function parseModelRecursively(response: Response, parentObj, key, value) {
   if (typeof value === 'string') {
-    return parseModelString(response, parentObj, value);
+    return parseModelString(response, parentObj, key, value);
   }
   if (typeof value === 'object' && value !== null) {
     if (isArray(value)) {
@@ -55,6 +56,7 @@ function parseModelRecursively(response: Response, parentObj, value) {
         (parsedValue: any)[i] = parseModelRecursively(
           response,
           value,
+          '' + i,
           value[i],
         );
       }
@@ -65,6 +67,7 @@ function parseModelRecursively(response: Response, parentObj, value) {
         (parsedValue: any)[innerKey] = parseModelRecursively(
           response,
           value,
+          innerKey,
           value[innerKey],
         );
       }
@@ -77,5 +80,5 @@ function parseModelRecursively(response: Response, parentObj, value) {
 const dummy = {};
 
 export function parseModel<T>(response: Response, json: UninitializedModel): T {
-  return (parseModelRecursively(response, dummy, json): any);
+  return (parseModelRecursively(response, dummy, '', json): any);
 }

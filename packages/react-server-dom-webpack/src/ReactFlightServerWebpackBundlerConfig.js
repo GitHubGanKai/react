@@ -1,5 +1,5 @@
 /**
- * Copyright (c) Facebook, Inc. and its affiliates.
+ * Copyright (c) Meta Platforms, Inc. and affiliates.
  *
  * This source code is licensed under the MIT license found in the
  * LICENSE file in the root directory of this source tree.
@@ -13,36 +13,58 @@ type WebpackMap = {
   },
 };
 
-export type BundlerConfig = WebpackMap;
+export type BundlerConfig = {
+  clientManifest: WebpackMap,
+};
 
 // eslint-disable-next-line no-unused-vars
-export type ModuleReference<T> = {
-  $$typeof: Symbol,
+export type ClientReference<T> = {
+  $$typeof: symbol,
   filepath: string,
   name: string,
+  async: boolean,
 };
 
 export type ModuleMetaData = {
   id: string,
   chunks: Array<string>,
   name: string,
+  async: boolean,
 };
 
-export type ModuleKey = string;
+export type ClientReferenceKey = string;
 
-const MODULE_TAG = Symbol.for('react.module.reference');
+const CLIENT_REFERENCE_TAG = Symbol.for('react.client.reference');
 
-export function getModuleKey(reference: ModuleReference<any>): ModuleKey {
-  return reference.filepath + '#' + reference.name;
+export function getClientReferenceKey(
+  reference: ClientReference<any>,
+): ClientReferenceKey {
+  return (
+    reference.filepath +
+    '#' +
+    reference.name +
+    (reference.async ? '#async' : '')
+  );
 }
 
-export function isModuleReference(reference: Object): boolean {
-  return reference.$$typeof === MODULE_TAG;
+export function isClientReference(reference: Object): boolean {
+  return reference.$$typeof === CLIENT_REFERENCE_TAG;
 }
 
 export function resolveModuleMetaData<T>(
   config: BundlerConfig,
-  moduleReference: ModuleReference<T>,
+  clientReference: ClientReference<T>,
 ): ModuleMetaData {
-  return config[moduleReference.filepath][moduleReference.name];
+  const resolvedModuleData =
+    config.clientManifest[clientReference.filepath][clientReference.name];
+  if (clientReference.async) {
+    return {
+      id: resolvedModuleData.id,
+      chunks: resolvedModuleData.chunks,
+      name: resolvedModuleData.name,
+      async: true,
+    };
+  } else {
+    return resolvedModuleData;
+  }
 }

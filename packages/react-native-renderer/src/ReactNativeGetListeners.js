@@ -1,5 +1,5 @@
 /**
- * Copyright (c) Facebook, Inc. and its affiliates.
+ * Copyright (c) Meta Platforms, Inc. and affiliates.
  *
  * This source code is licensed under the MIT license found in the
  * LICENSE file in the root directory of this source tree.
@@ -117,14 +117,12 @@ export default function getListeners(
       // all imperative event listeners in a function to unwrap the SyntheticEvent
       // and pass them an Event.
       // When this API is more stable and used more frequently, we can revisit.
-      const listenerFnWrapper = function(syntheticEvent, ...args) {
+      // $FlowFixMe[missing-local-annot]
+      const listenerFnWrapper = function (syntheticEvent, ...args) {
         const eventInst = new CustomEvent(mangledImperativeRegistrationName, {
           detail: syntheticEvent.nativeEvent,
         });
         eventInst.isTrusted = true;
-        // setSyntheticEvent is present on the React Native Event shim.
-        // It is used to forward method calls on Event to the underlying SyntheticEvent.
-        // $FlowFixMe
         eventInst.setSyntheticEvent(syntheticEvent);
 
         listenerObj.listener(eventInst, ...args);
@@ -135,7 +133,7 @@ export default function getListeners(
       // and by removing it from eventListeners once it is called (but only
       // when it's actually been executed).
       if (listenerObj.options.once) {
-        listeners.push(function(...args) {
+        listeners.push(function (...args) {
           // Remove from the event listener once it's been called
           stateNode.canonical.removeEventListener_unstable(
             mangledImperativeRegistrationName,

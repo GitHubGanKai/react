@@ -1,5 +1,5 @@
 /**
- * Copyright (c) Facebook, Inc. and its affiliates.
+ * Copyright (c) Meta Platforms, Inc. and affiliates.
  *
  * This source code is licensed under the MIT license found in the
  * LICENSE file in the root directory of this source tree.
@@ -81,11 +81,7 @@ describe('updaters', () => {
     };
 
     jest.mock(
-      'react-reconciler/src/ReactFiberDevToolsHook.old',
-      () => mockDevToolsHook,
-    );
-    jest.mock(
-      'react-reconciler/src/ReactFiberDevToolsHook.new',
+      'react-reconciler/src/ReactFiberDevToolsHook',
       () => mockDevToolsHook,
     );
 
@@ -259,7 +255,7 @@ describe('updaters', () => {
     Scheduler.unstable_flushAll();
   });
 
-  it('should cover suspense pings', async done => {
+  it('should cover suspense pings', async () => {
     let data = null;
     let resolver = null;
     let promise = null;
@@ -316,8 +312,6 @@ describe('updaters', () => {
 
     // Verify no outstanding flushes
     Scheduler.unstable_flushAll();
-
-    done();
   });
 
   it('should cover error handling', async () => {

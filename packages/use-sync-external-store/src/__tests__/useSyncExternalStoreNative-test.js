@@ -1,5 +1,5 @@
 /**
- * Copyright (c) Facebook, Inc. and its affiliates.
+ * Copyright (c) Meta Platforms, Inc. and affiliates.
  *
  * This source code is licensed under the MIT license found in the
  * LICENSE file in the root directory of this source tree.
@@ -66,10 +66,10 @@ describe('useSyncExternalStore (userspace shim, server rendering)', () => {
         ),
       );
     }
-    useSyncExternalStore = require('use-sync-external-store/shim')
-      .useSyncExternalStore;
-    useSyncExternalStoreWithSelector = require('use-sync-external-store/shim/with-selector')
-      .useSyncExternalStoreWithSelector;
+    useSyncExternalStore =
+      require('use-sync-external-store/shim').useSyncExternalStore;
+    useSyncExternalStoreWithSelector =
+      require('use-sync-external-store/shim/with-selector').useSyncExternalStoreWithSelector;
   });
 
   function Text({text}) {

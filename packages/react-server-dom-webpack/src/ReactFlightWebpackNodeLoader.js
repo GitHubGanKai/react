@@ -1,5 +1,5 @@
 /**
- * Copyright (c) Facebook, Inc. and its affiliates.
+ * Copyright (c) Meta Platforms, Inc. and affiliates.
  *
  * This source code is licensed under the MIT license found in the
  * LICENSE file in the root directory of this source tree.
@@ -7,7 +7,7 @@
  * @flow
  */
 
-import acorn from 'acorn';
+import * as acorn from 'acorn';
 
 type ResolveContext = {
   conditions: Array<string>,
@@ -94,13 +94,13 @@ export async function getSource(
   url: string,
   context: GetSourceContext,
   defaultGetSource: GetSourceFunction,
-) {
+): Promise<{source: Source}> {
   // We stash this in case we end up needing to resolve export * statements later.
   stashedGetSource = defaultGetSource;
   return defaultGetSource(url, context, defaultGetSource);
 }
 
-function addExportNames(names, node) {
+function addExportNames(names: Array<string>, node: any) {
   switch (node.type) {
     case 'Identifier':
       names.push(node.name);
@@ -174,7 +174,7 @@ async function parseExportNamesInto(
   transformedSource: string,
   names: Array<string>,
   parentURL: string,
-  defaultTransformSource,
+  defaultTransformSource: TransformSourceFunction,
 ): Promise<void> {
   const {body} = acorn.parse(transformedSource, {
     ecmaVersion: '2019',
@@ -237,7 +237,7 @@ export async function transformSource(
       throw new Error('Expected source to have been transformed to a string.');
     }
 
-    const names = [];
+    const names: Array<string> = [];
     await parseExportNamesInto(
       transformedSource,
       names,
@@ -246,19 +246,39 @@ export async function transformSource(
     );
 
     let newSrc =
-      "const MODULE_REFERENCE = Symbol.for('react.module.reference');\n";
+      "const CLIENT_REFERENCE = Symbol.for('react.client.reference');\n";
     for (let i = 0; i < names.length; i++) {
       const name = names[i];
       if (name === 'default') {
         newSrc += 'export default ';
+        newSrc += 'Object.defineProperties(function() {';
+        newSrc +=
+          'throw new Error(' +
+          JSON.stringify(
+            `Attempted to call the default export of ${context.url} from the server` +
+              `but it's on the client. It's not possible to invoke a client function from ` +
+              `the server, it can only be rendered as a Component or passed to props of a` +
+              `Client Component.`,
+          ) +
+          ');';
       } else {
         newSrc += 'export const ' + name + ' = ';
+        newSrc += 'export default ';
+        newSrc += 'Object.defineProperties(function() {';
+        newSrc +=
+          'throw new Error(' +
+          JSON.stringify(
+            `Attempted to call ${name}() from the server but ${name} is on the client. ` +
+              `It's not possible to invoke a client function from the server, it can ` +
+              `only be rendered as a Component or passed to props of a Client Component.`,
+          ) +
+          ');';
       }
-      newSrc += '{ $$typeof: MODULE_REFERENCE, filepath: ';
-      newSrc += JSON.stringify(context.url);
-      newSrc += ', name: ';
-      newSrc += JSON.stringify(name);
-      newSrc += '};\n';
+      newSrc += '},{';
+      newSrc += 'name: { value: ' + JSON.stringify(name) + '},';
+      newSrc += '$$typeof: {value: CLIENT_REFERENCE},';
+      newSrc += 'filepath: {value: ' + JSON.stringify(context.url) + '}';
+      newSrc += '});\n';
     }
 
     return {source: newSrc};

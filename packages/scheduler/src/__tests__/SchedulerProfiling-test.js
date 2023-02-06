@@ -1,5 +1,5 @@
 /**
- * Copyright (c) Facebook, Inc. and its affiliates.
+ * Copyright (c) Meta Platforms, Inc. and affiliates.
  *
  * This source code is licensed under the MIT license found in the
  * LICENSE file in the root directory of this source tree.
@@ -81,7 +81,8 @@ describe('Scheduler', () => {
   const SchedulerResumeEvent = 8;
 
   function stopProfilingAndPrintFlamegraph() {
-    const eventBuffer = Scheduler.unstable_Profiling.stopLoggingProfilingEvents();
+    const eventBuffer =
+      Scheduler.unstable_Profiling.stopLoggingProfilingEvents();
     if (eventBuffer === null) {
       return '(empty profile)';
     }

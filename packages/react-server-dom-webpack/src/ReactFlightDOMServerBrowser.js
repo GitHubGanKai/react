@@ -1,5 +1,5 @@
 /**
- * Copyright (c) Facebook, Inc. and its affiliates.
+ * Copyright (c) Meta Platforms, Inc. and affiliates.
  *
  * This source code is licensed under the MIT license found in the
  * LICENSE file in the root directory of this source tree.
@@ -15,36 +15,50 @@ import {
   createRequest,
   startWork,
   startFlowing,
+  abort,
 } from 'react-server/src/ReactFlightServer';
 
 type Options = {
-  onError?: (error: mixed) => void,
-  context?: Array<[string, ServerContextJSONValue]>,
   identifierPrefix?: string,
+  signal?: AbortSignal,
+  context?: Array<[string, ServerContextJSONValue]>,
+  onError?: (error: mixed) => void,
 };
 
 function renderToReadableStream(
   model: ReactModel,
-  webpackMap: BundlerConfig,
+  webpackMaps: BundlerConfig,
   options?: Options,
 ): ReadableStream {
   const request = createRequest(
     model,
-    webpackMap,
+    webpackMaps,
     options ? options.onError : undefined,
     options ? options.context : undefined,
     options ? options.identifierPrefix : undefined,
   );
+  if (options && options.signal) {
+    const signal = options.signal;
+    if (signal.aborted) {
+      abort(request, (signal: any).reason);
+    } else {
+      const listener = () => {
+        abort(request, (signal: any).reason);
+        signal.removeEventListener('abort', listener);
+      };
+      signal.addEventListener('abort', listener);
+    }
+  }
   const stream = new ReadableStream(
     {
       type: 'bytes',
-      start(controller) {
+      start: (controller): ?Promise<void> => {
         startWork(request);
       },
-      pull(controller) {
+      pull: (controller): ?Promise<void> => {
         startFlowing(request, controller);
       },
-      cancel(reason) {},
+      cancel: (reason): ?Promise<void> => {},
     },
     // $FlowFixMe size() methods are not allowed on byte streams.
     {highWaterMark: 0},

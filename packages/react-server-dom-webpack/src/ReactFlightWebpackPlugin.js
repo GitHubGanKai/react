@@ -1,5 +1,5 @@
 /**
- * Copyright (c) Facebook, Inc. and its affiliates.
+ * Copyright (c) Meta Platforms, Inc. and affiliates.
  *
  * This source code is licensed under the MIT license found in the
  * LICENSE file in the root directory of this source tree.
@@ -25,11 +25,11 @@ import {
 import isArray from 'shared/isArray';
 
 class ClientReferenceDependency extends ModuleDependency {
-  constructor(request) {
+  constructor(request: mixed) {
     super(request);
   }
 
-  get type() {
+  get type(): string {
     return 'client-reference';
   }
 }
@@ -39,8 +39,8 @@ class ClientReferenceDependency extends ModuleDependency {
 // We use the Flight client implementation because you can't get to these
 // without the client runtime so it's the first time in the loading sequence
 // you might want them.
-const clientImportName = 'react-server-dom-webpack';
-const clientFileName = require.resolve('../');
+const clientImportName = 'react-server-dom-webpack/client';
+const clientFileName = require.resolve('../client');
 
 type ClientReferenceSearchPath = {
   directory: string,
@@ -88,6 +88,7 @@ export default class ReactFlightWebpackPlugin {
     ) {
       this.clientReferences = [(options.clientReferences: $FlowFixMe)];
     } else {
+      // $FlowFixMe[incompatible-type] found when upgrading Flow
       this.clientReferences = options.clientReferences;
     }
     if (typeof options.chunkName === 'string') {
@@ -118,7 +119,7 @@ export default class ReactFlightWebpackPlugin {
           contextResolver,
           compiler.inputFileSystem,
           contextModuleFactory,
-          function(err, resolvedClientRefs) {
+          function (err, resolvedClientRefs) {
             if (err) {
               callback(err);
               return;
@@ -143,6 +144,7 @@ export default class ReactFlightWebpackPlugin {
           new NullDependency.Template(),
         );
 
+        // $FlowFixMe[missing-local-annot]
         const handler = parser => {
           // We need to add all client references as dependency of something in the graph so
           // Webpack knows which entries need to know about the relevant chunks and include the
@@ -159,7 +161,9 @@ export default class ReactFlightWebpackPlugin {
             clientFileNameFound = true;
 
             if (resolvedClientReferences) {
+              // $FlowFixMe[incompatible-use] found when upgrading Flow
               for (let i = 0; i < resolvedClientReferences.length; i++) {
+                // $FlowFixMe[incompatible-use] found when upgrading Flow
                 const dep = resolvedClientReferences[i];
 
                 const chunkName = _this.chunkName
@@ -201,7 +205,7 @@ export default class ReactFlightWebpackPlugin {
           name: PLUGIN_NAME,
           stage: Compilation.PROCESS_ASSETS_STAGE_REPORT,
         },
-        function() {
+        function () {
           if (clientFileNameFound === false) {
             compilation.warnings.push(
               new WebpackError(
@@ -211,13 +215,18 @@ export default class ReactFlightWebpackPlugin {
             return;
           }
 
-          const json = {};
-          compilation.chunkGroups.forEach(function(chunkGroup) {
-            const chunkIds = chunkGroup.chunks.map(function(c) {
+          const json: {
+            [string]: {
+              [string]: {chunks: $FlowFixMe, id: $FlowFixMe, name: string},
+            },
+          } = {};
+          compilation.chunkGroups.forEach(function (chunkGroup) {
+            const chunkIds = chunkGroup.chunks.map(function (c) {
               return c.id;
             });
 
-            function recordModule(id, module) {
+            // $FlowFixMe[missing-local-annot]
+            function recordModule(id: $FlowFixMe, module) {
               // TODO: Hook into deps instead of the target module.
               // That way we know by the type of dep whether to include.
               // It also resolves conflicts when the same module is in multiple chunks.
@@ -230,14 +239,16 @@ export default class ReactFlightWebpackPlugin {
                 .getExportsInfo(module)
                 .getProvidedExports();
 
-              const moduleExports = {};
+              const moduleExports: {
+                [string]: {chunks: $FlowFixMe, id: $FlowFixMe, name: string},
+              } = {};
               ['', '*']
                 .concat(
                   Array.isArray(moduleProvidedExports)
                     ? moduleProvidedExports
                     : [],
                 )
-                .forEach(function(name) {
+                .forEach(function (name) {
                   moduleExports[name] = {
                     id,
                     chunks: chunkIds,
@@ -251,12 +262,11 @@ export default class ReactFlightWebpackPlugin {
               }
             }
 
-            chunkGroup.chunks.forEach(function(chunk) {
-              const chunkModules = compilation.chunkGraph.getChunkModulesIterable(
-                chunk,
-              );
+            chunkGroup.chunks.forEach(function (chunk) {
+              const chunkModules =
+                compilation.chunkGraph.getChunkModulesIterable(chunk);
 
-              Array.from(chunkModules).forEach(function(module) {
+              Array.from(chunkModules).forEach(function (module) {
                 const moduleId = compilation.chunkGraph.getModuleId(module);
 
                 recordModule(moduleId, module);
@@ -305,7 +315,8 @@ export default class ReactFlightWebpackPlugin {
           cb(null, [new ClientReferenceDependency(clientReferencePath)]);
           return;
         }
-        const clientReferenceSearch: ClientReferenceSearchPath = clientReferencePath;
+        const clientReferenceSearch: ClientReferenceSearchPath =
+          clientReferencePath;
         contextResolver.resolve(
           {},
           context,
@@ -327,7 +338,7 @@ export default class ReactFlightWebpackPlugin {
             contextModuleFactory.resolveDependencies(
               fs,
               options,
-              (err2: null | Error, deps: Array<ModuleDependency>) => {
+              (err2: null | Error, deps: Array<any /*ModuleDependency*/>) => {
                 if (err2) return cb(err2);
                 const clientRefDeps = deps.map(dep => {
                   // use userRequest instead of request. request always end with undefined which is wrong
@@ -347,8 +358,9 @@ export default class ReactFlightWebpackPlugin {
         result: $ReadOnlyArray<$ReadOnlyArray<ClientReferenceDependency>>,
       ): void => {
         if (err) return callback(err);
-        const flat = [];
+        const flat: Array<any> = [];
         for (let i = 0; i < result.length; i++) {
+          // $FlowFixMe[method-unbinding]
           flat.push.apply(flat, result[i]);
         }
         callback(null, flat);

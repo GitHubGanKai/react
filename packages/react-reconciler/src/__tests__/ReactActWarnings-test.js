@@ -1,5 +1,5 @@
 /**
- * Copyright (c) Facebook, Inc. and its affiliates.
+ * Copyright (c) Meta Platforms, Inc. and affiliates.
  *
  * This source code is licensed under the MIT license found in the
  * LICENSE file in the root directory of this source tree.
@@ -292,7 +292,7 @@ describe('act warnings', () => {
   });
 
   // @gate __DEV__
-  // @gate enableCache
+  // @gate enableLegacyCache
   test('warns if Suspense retry is not wrapped', () => {
     function App() {
       return (
@@ -311,9 +311,7 @@ describe('act warnings', () => {
       expect(root).toMatchRenderedOutput('Loading...');
 
       // This is a retry, not a ping, because we already showed a fallback.
-      expect(() =>
-        resolveText('Async'),
-      ).toErrorDev(
+      expect(() => resolveText('Async')).toErrorDev(
         'A suspended resource finished loading inside a test, but the event ' +
           'was not wrapped in act(...)',
         {withoutStack: true},
@@ -322,7 +320,7 @@ describe('act warnings', () => {
   });
 
   // @gate __DEV__
-  // @gate enableCache
+  // @gate enableLegacyCache
   test('warns if Suspense ping is not wrapped', () => {
     function App({showMore}) {
       return (
@@ -349,9 +347,7 @@ describe('act warnings', () => {
       expect(root).toMatchRenderedOutput('(empty)');
 
       // This is a ping, not a retry, because no fallback is showing.
-      expect(() =>
-        resolveText('Async'),
-      ).toErrorDev(
+      expect(() => resolveText('Async')).toErrorDev(
         'A suspended resource finished loading inside a test, but the event ' +
           'was not wrapped in act(...)',
         {withoutStack: true},
