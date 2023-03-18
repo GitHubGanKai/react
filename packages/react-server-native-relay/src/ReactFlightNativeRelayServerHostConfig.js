@@ -8,18 +8,23 @@
  */
 
 import type {RowEncoding, JSONValue} from './ReactFlightNativeRelayProtocol';
-import type {Request, ReactModel} from 'react-server/src/ReactFlightServer';
+import type {
+  Request,
+  ReactClientValue,
+} from 'react-server/src/ReactFlightServer';
 import hasOwnProperty from 'shared/hasOwnProperty';
 import isArray from 'shared/isArray';
 import type {JSResourceReference} from 'JSResourceReference';
 import JSResourceReferenceImpl from 'JSResourceReferenceImpl';
 
 export type ClientReference<T> = JSResourceReference<T>;
+export type ServerReference<T> = T;
+export type ServerReferenceId = {};
 
 import type {
   Destination,
-  BundlerConfig,
-  ModuleMetaData,
+  BundlerConfig as ClientManifest,
+  ClientReferenceMetadata,
 } from 'ReactFlightNativeRelayServerIntegration';
 
 import {resolveModelToJSON} from 'react-server/src/ReactFlightServer';
@@ -27,17 +32,21 @@ import {resolveModelToJSON} from 'react-server/src/ReactFlightServer';
 import {
   emitRow,
   close,
-  resolveModuleMetaData as resolveModuleMetaDataImpl,
+  resolveClientReferenceMetadata as resolveClientReferenceMetadataImpl,
 } from 'ReactFlightNativeRelayServerIntegration';
 
 export type {
   Destination,
-  BundlerConfig,
-  ModuleMetaData,
+  BundlerConfig as ClientManifest,
+  ClientReferenceMetadata,
 } from 'ReactFlightNativeRelayServerIntegration';
 
 export function isClientReference(reference: Object): boolean {
   return reference instanceof JSResourceReferenceImpl;
+}
+
+export function isServerReference(reference: Object): boolean {
+  return false;
 }
 
 export type ClientReferenceKey = ClientReference<any>;
@@ -50,11 +59,25 @@ export function getClientReferenceKey(
   return reference;
 }
 
-export function resolveModuleMetaData<T>(
-  config: BundlerConfig,
+export function resolveClientReferenceMetadata<T>(
+  config: ClientManifest,
   resource: ClientReference<T>,
-): ModuleMetaData {
-  return resolveModuleMetaDataImpl(config, resource);
+): ClientReferenceMetadata {
+  return resolveClientReferenceMetadataImpl(config, resource);
+}
+
+export function getServerReferenceId<T>(
+  config: ClientManifest,
+  resource: ServerReference<T>,
+): ServerReferenceId {
+  throw new Error('Not implemented.');
+}
+
+export function getServerReferenceBoundArguments<T>(
+  config: ClientManifest,
+  resource: ServerReference<T>,
+): Array<ReactClientValue> {
+  throw new Error('Not implemented.');
 }
 
 export type Chunk = RowEncoding;
@@ -108,9 +131,9 @@ export function processErrorChunkDev(
 
 function convertModelToJSON(
   request: Request,
-  parent: {+[key: string]: ReactModel} | $ReadOnlyArray<ReactModel>,
+  parent: {+[key: string]: ReactClientValue} | $ReadOnlyArray<ReactClientValue>,
   key: string,
-  model: ReactModel,
+  model: ReactClientValue,
 ): JSONValue {
   const json = resolveModelToJSON(request, parent, key, model);
   if (typeof json === 'object' && json !== null) {
@@ -142,7 +165,7 @@ function convertModelToJSON(
 export function processModelChunk(
   request: Request,
   id: number,
-  model: ReactModel,
+  model: ReactClientValue,
 ): Chunk {
   // $FlowFixMe no good way to define an empty exact object
   const json = convertModelToJSON(request, {}, '', model);
@@ -157,13 +180,13 @@ export function processReferenceChunk(
   return ['O', id, reference];
 }
 
-export function processModuleChunk(
+export function processImportChunk(
   request: Request,
   id: number,
-  moduleMetaData: ModuleMetaData,
+  clientReferenceMetadata: ClientReferenceMetadata,
 ): Chunk {
-  // The moduleMetaData is already a JSON serializable value.
-  return ['I', id, moduleMetaData];
+  // The clientReferenceMetadata is already a JSON serializable value.
+  return ['I', id, clientReferenceMetadata];
 }
 
 export function scheduleWork(callback: () => void) {

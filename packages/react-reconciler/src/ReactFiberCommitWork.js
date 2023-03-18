@@ -14,11 +14,12 @@ import type {
   Container,
   ChildSet,
   UpdatePayload,
+  HoistableRoot,
 } from './ReactFiberHostConfig';
 import type {Fiber, FiberRoot} from './ReactInternalTypes';
 import type {Lanes} from './ReactFiberLane';
 import {NoTimestamp, SyncLane} from './ReactFiberLane';
-import type {SuspenseState} from './ReactFiberSuspenseComponent';
+import type {SuspenseState, RetryQueue} from './ReactFiberSuspenseComponent';
 import type {UpdateQueue} from './ReactFiberClassUpdateQueue';
 import type {FunctionComponentUpdateQueue} from './ReactFiberHooks';
 import type {Wakeable} from 'shared/ReactTypes';
@@ -60,7 +61,7 @@ import {
   ClassComponent,
   HostRoot,
   HostComponent,
-  HostResource,
+  HostHoistable,
   HostSingleton,
   HostText,
   HostPortal,
@@ -93,6 +94,7 @@ import {
   LayoutMask,
   PassiveMask,
   Visibility,
+  SuspenseyCommit,
 } from './ReactFiberFlags';
 import getComponentNameFromFiber from 'react-reconciler/src/getComponentNameFromFiber';
 import {
@@ -147,11 +149,17 @@ import {
   prepareForCommit,
   beforeActiveInstanceBlur,
   detachDeletedInstance,
-  acquireResource,
-  releaseResource,
   clearSingleton,
   acquireSingletonInstance,
   releaseSingletonInstance,
+  getHoistableRoot,
+  acquireResource,
+  releaseResource,
+  hydrateHoistable,
+  mountHoistable,
+  unmountHoistable,
+  prepareToCommitHoistables,
+  suspendInstance,
 } from './ReactFiberHostConfig';
 import {
   captureCommitPhaseError,
@@ -247,10 +255,7 @@ export function reportUncaughtErrorInDEV(error: mixed) {
   }
 }
 
-const callComponentWillUnmountWithTimer = function (
-  current: Fiber,
-  instance: any,
-) {
+function callComponentWillUnmountWithTimer(current: Fiber, instance: any) {
   instance.props = current.memoizedProps;
   instance.state = current.memoizedState;
   if (shouldProfile(current)) {
@@ -263,7 +268,7 @@ const callComponentWillUnmountWithTimer = function (
   } else {
     instance.componentWillUnmount();
   }
-};
+}
 
 // Capture errors so they don't interrupt unmounting.
 function safelyCallComponentWillUnmount(
@@ -536,7 +541,7 @@ function commitBeforeMutationEffectsOnFiber(finishedWork: Fiber) {
       break;
     }
     case HostComponent:
-    case HostResource:
+    case HostHoistable:
     case HostSingleton:
     case HostText:
     case HostPortal:
@@ -1109,7 +1114,7 @@ function commitLayoutEffectOnFiber(
       }
       break;
     }
-    case HostResource: {
+    case HostHoistable: {
       if (enableFloat && supportsResources) {
         recursivelyTraverseLayoutEffects(
           finishedRoot,
@@ -1515,7 +1520,7 @@ function hideOrUnhideAllChildren(finishedWork: Fiber, isHidden: boolean) {
       if (
         node.tag === HostComponent ||
         (enableFloat && supportsResources
-          ? node.tag === HostResource
+          ? node.tag === HostHoistable
           : false) ||
         (enableHostSingletons && supportsSingletons
           ? node.tag === HostSingleton
@@ -1592,7 +1597,7 @@ function commitAttachRef(finishedWork: Fiber) {
     const instance = finishedWork.stateNode;
     let instanceToUse;
     switch (finishedWork.tag) {
-      case HostResource:
+      case HostHoistable:
       case HostSingleton:
       case HostComponent:
         instanceToUse = getPublicInstance(instance);
@@ -1736,7 +1741,7 @@ function isHostParent(fiber: Fiber): boolean {
   return (
     fiber.tag === HostComponent ||
     fiber.tag === HostRoot ||
-    (enableFloat && supportsResources ? fiber.tag === HostResource : false) ||
+    (enableFloat && supportsResources ? fiber.tag === HostHoistable : false) ||
     (enableHostSingletons && supportsSingletons
       ? fiber.tag === HostSingleton
       : false) ||
@@ -2018,7 +2023,7 @@ function commitDeletionEffectsOnFiber(
   // into their subtree. There are simpler cases in the inner switch
   // that don't modify the stack.
   switch (deletedFiber.tag) {
-    case HostResource: {
+    case HostHoistable: {
       if (enableFloat && supportsResources) {
         if (!offscreenSubtreeWasHidden) {
           safelyDetachRef(deletedFiber, nearestMountedAncestor);
@@ -2030,6 +2035,8 @@ function commitDeletionEffectsOnFiber(
         );
         if (deletedFiber.memoizedState) {
           releaseResource(deletedFiber.memoizedState);
+        } else if (deletedFiber.stateNode) {
+          unmountHoistable(deletedFiber.stateNode);
         }
         return;
       }
@@ -2305,9 +2312,9 @@ function commitSuspenseCallback(finishedWork: Fiber) {
   if (enableSuspenseCallback && newState !== null) {
     const suspenseCallback = finishedWork.memoizedProps.suspenseCallback;
     if (typeof suspenseCallback === 'function') {
-      const wakeables: Set<Wakeable> | null = (finishedWork.updateQueue: any);
-      if (wakeables !== null) {
-        suspenseCallback(new Set(wakeables));
+      const retryQueue: RetryQueue | null = (finishedWork.updateQueue: any);
+      if (retryQueue !== null) {
+        suspenseCallback(new Set(retryQueue));
       }
     } else if (__DEV__) {
       if (suspenseCallback !== undefined) {
@@ -2426,7 +2433,7 @@ export function attachOffscreenInstance(instance: OffscreenInstance): void {
 
 function attachSuspenseRetryListeners(
   finishedWork: Fiber,
-  wakeables: Set<Wakeable>,
+  wakeables: RetryQueue,
 ) {
   // If this boundary just timed out, then it will have a set of wakeables.
   // For each wakeable, attach a listener so that when it resolves, React
@@ -2520,6 +2527,8 @@ function recursivelyTraverseMutationEffects(
   setCurrentDebugFiberInDEV(prevDebugFiber);
 }
 
+let currentHoistableRoot: HoistableRoot | null = null;
+
 function commitMutationEffectsOnFiber(
   finishedWork: Fiber,
   root: FiberRoot,
@@ -2603,8 +2612,11 @@ function commitMutationEffectsOnFiber(
       }
       return;
     }
-    case HostResource: {
+    case HostHoistable: {
       if (enableFloat && supportsResources) {
+        // We cast because we always set the root at the React root and so it cannot be
+        // null while we are processing mutation effects
+        const hoistableRoot: HoistableRoot = (currentHoistableRoot: any);
         recursivelyTraverseMutationEffects(root, finishedWork, lanes);
         commitReconciliationEffects(finishedWork);
 
@@ -2615,16 +2627,81 @@ function commitMutationEffectsOnFiber(
         }
 
         if (flags & Update) {
+          const currentResource =
+            current !== null ? current.memoizedState : null;
           const newResource = finishedWork.memoizedState;
-          if (current !== null) {
-            const currentResource = current.memoizedState;
-            if (currentResource !== newResource) {
+          if (current === null) {
+            // We are mounting a new HostHoistable Fiber. We fork the mount
+            // behavior based on whether this instance is a Hoistable Instance
+            // or a Hoistable Resource
+            if (newResource === null) {
+              if (finishedWork.stateNode === null) {
+                finishedWork.stateNode = hydrateHoistable(
+                  hoistableRoot,
+                  finishedWork.type,
+                  finishedWork.memoizedProps,
+                  finishedWork,
+                );
+              } else {
+                mountHoistable(
+                  hoistableRoot,
+                  finishedWork.type,
+                  finishedWork.stateNode,
+                );
+              }
+            } else {
+              finishedWork.stateNode = acquireResource(
+                hoistableRoot,
+                newResource,
+                finishedWork.memoizedProps,
+              );
+            }
+          } else if (currentResource !== newResource) {
+            // We are moving to or from Hoistable Resource, or between different Hoistable Resources
+            if (currentResource === null) {
+              if (current.stateNode !== null) {
+                unmountHoistable(current.stateNode);
+              }
+            } else {
               releaseResource(currentResource);
             }
+            if (newResource === null) {
+              mountHoistable(
+                hoistableRoot,
+                finishedWork.type,
+                finishedWork.stateNode,
+              );
+            } else {
+              acquireResource(
+                hoistableRoot,
+                newResource,
+                finishedWork.memoizedProps,
+              );
+            }
+          } else if (newResource === null && finishedWork.stateNode !== null) {
+            // We may have an update on a Hoistable element
+            const updatePayload: null | UpdatePayload =
+              (finishedWork.updateQueue: any);
+            finishedWork.updateQueue = null;
+            if (updatePayload !== null) {
+              try {
+                commitUpdate(
+                  finishedWork.stateNode,
+                  updatePayload,
+                  finishedWork.type,
+                  current.memoizedProps,
+                  finishedWork.memoizedProps,
+                  finishedWork,
+                );
+              } catch (error) {
+                captureCommitPhaseError(
+                  finishedWork,
+                  finishedWork.return,
+                  error,
+                );
+              }
+            }
           }
-          finishedWork.stateNode = newResource
-            ? acquireResource(newResource)
-            : null;
         }
         return;
       }
@@ -2744,8 +2821,20 @@ function commitMutationEffectsOnFiber(
       return;
     }
     case HostRoot: {
-      recursivelyTraverseMutationEffects(root, finishedWork, lanes);
-      commitReconciliationEffects(finishedWork);
+      if (enableFloat && supportsResources) {
+        prepareToCommitHoistables();
+
+        const previousHoistableRoot = currentHoistableRoot;
+        currentHoistableRoot = getHoistableRoot(root.containerInfo);
+
+        recursivelyTraverseMutationEffects(root, finishedWork, lanes);
+        currentHoistableRoot = previousHoistableRoot;
+
+        commitReconciliationEffects(finishedWork);
+      } else {
+        recursivelyTraverseMutationEffects(root, finishedWork, lanes);
+        commitReconciliationEffects(finishedWork);
+      }
 
       if (flags & Update) {
         if (supportsMutation && supportsHydration) {
@@ -2777,8 +2866,18 @@ function commitMutationEffectsOnFiber(
       return;
     }
     case HostPortal: {
-      recursivelyTraverseMutationEffects(root, finishedWork, lanes);
-      commitReconciliationEffects(finishedWork);
+      if (enableFloat && supportsResources) {
+        const previousHoistableRoot = currentHoistableRoot;
+        currentHoistableRoot = getHoistableRoot(
+          finishedWork.stateNode.containerInfo,
+        );
+        recursivelyTraverseMutationEffects(root, finishedWork, lanes);
+        commitReconciliationEffects(finishedWork);
+        currentHoistableRoot = previousHoistableRoot;
+      } else {
+        recursivelyTraverseMutationEffects(root, finishedWork, lanes);
+        commitReconciliationEffects(finishedWork);
+      }
 
       if (flags & Update) {
         if (supportsPersistence) {
@@ -2820,10 +2919,10 @@ function commitMutationEffectsOnFiber(
         } catch (error) {
           captureCommitPhaseError(finishedWork, finishedWork.return, error);
         }
-        const wakeables: Set<Wakeable> | null = (finishedWork.updateQueue: any);
-        if (wakeables !== null) {
+        const retryQueue: RetryQueue | null = (finishedWork.updateQueue: any);
+        if (retryQueue !== null) {
           finishedWork.updateQueue = null;
-          attachSuspenseRetryListeners(finishedWork, wakeables);
+          attachSuspenseRetryListeners(finishedWork, retryQueue);
         }
       }
       return;
@@ -2909,10 +3008,10 @@ function commitMutationEffectsOnFiber(
         const offscreenQueue: OffscreenQueue | null =
           (finishedWork.updateQueue: any);
         if (offscreenQueue !== null) {
-          const wakeables = offscreenQueue.wakeables;
-          if (wakeables !== null) {
-            offscreenQueue.wakeables = null;
-            attachSuspenseRetryListeners(finishedWork, wakeables);
+          const retryQueue = offscreenQueue.retryQueue;
+          if (retryQueue !== null) {
+            offscreenQueue.retryQueue = null;
+            attachSuspenseRetryListeners(finishedWork, retryQueue);
           }
         }
       }
@@ -2923,10 +3022,11 @@ function commitMutationEffectsOnFiber(
       commitReconciliationEffects(finishedWork);
 
       if (flags & Update) {
-        const wakeables: Set<Wakeable> | null = (finishedWork.updateQueue: any);
-        if (wakeables !== null) {
+        const retryQueue: Set<Wakeable> | null =
+          (finishedWork.updateQueue: any);
+        if (retryQueue !== null) {
           finishedWork.updateQueue = null;
-          attachSuspenseRetryListeners(finishedWork, wakeables);
+          attachSuspenseRetryListeners(finishedWork, retryQueue);
         }
       }
       return;
@@ -3059,7 +3159,7 @@ export function disappearLayoutEffects(finishedWork: Fiber) {
       recursivelyTraverseDisappearLayoutEffects(finishedWork);
       break;
     }
-    case HostResource:
+    case HostHoistable:
     case HostSingleton:
     case HostComponent: {
       // TODO (Offscreen) Check: flags & RefStatic
@@ -3161,7 +3261,7 @@ export function reappearLayoutEffects(
     // case HostRoot: {
     //  ...
     // }
-    case HostResource:
+    case HostHoistable:
     case HostSingleton:
     case HostComponent: {
       recursivelyTraverseReappearLayoutEffects(
@@ -3962,6 +4062,27 @@ export function commitPassiveUnmountEffects(finishedWork: Fiber): void {
   setCurrentDebugFiberInDEV(finishedWork);
   commitPassiveUnmountOnFiber(finishedWork);
   resetCurrentDebugFiberInDEV();
+}
+
+export function recursivelyAccumulateSuspenseyCommit(parentFiber: Fiber): void {
+  if (parentFiber.subtreeFlags & SuspenseyCommit) {
+    let child = parentFiber.child;
+    while (child !== null) {
+      recursivelyAccumulateSuspenseyCommit(child);
+      switch (child.tag) {
+        case HostComponent:
+        case HostHoistable: {
+          if (child.flags & SuspenseyCommit) {
+            const type = child.type;
+            const props = child.memoizedProps;
+            suspendInstance(type, props);
+          }
+          break;
+        }
+      }
+      child = child.sibling;
+    }
+  }
 }
 
 function detachAlternateSiblings(parentFiber: Fiber) {

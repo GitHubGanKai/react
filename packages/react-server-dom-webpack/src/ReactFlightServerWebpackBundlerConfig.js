@@ -7,25 +7,28 @@
  * @flow
  */
 
-type WebpackMap = {
-  [filepath: string]: {
-    [name: string]: ModuleMetaData,
-  },
+import type {ReactClientValue} from 'react-server/src/ReactFlightServer';
+
+export type ClientManifest = {
+  [id: string]: ClientReferenceMetadata,
 };
 
-export type BundlerConfig = {
-  clientManifest: WebpackMap,
+export type ServerReference<T: Function> = T & {
+  $$typeof: symbol,
+  $$id: string,
+  $$bound: null | Array<ReactClientValue>,
 };
+
+export type ServerReferenceId = string;
 
 // eslint-disable-next-line no-unused-vars
 export type ClientReference<T> = {
   $$typeof: symbol,
-  filepath: string,
-  name: string,
-  async: boolean,
+  $$id: string,
+  $$async: boolean,
 };
 
-export type ModuleMetaData = {
+export type ClientReferenceMetadata = {
   id: string,
   chunks: Array<string>,
   name: string,
@@ -35,29 +38,28 @@ export type ModuleMetaData = {
 export type ClientReferenceKey = string;
 
 const CLIENT_REFERENCE_TAG = Symbol.for('react.client.reference');
+const SERVER_REFERENCE_TAG = Symbol.for('react.server.reference');
 
 export function getClientReferenceKey(
   reference: ClientReference<any>,
 ): ClientReferenceKey {
-  return (
-    reference.filepath +
-    '#' +
-    reference.name +
-    (reference.async ? '#async' : '')
-  );
+  return reference.$$async ? reference.$$id + '#async' : reference.$$id;
 }
 
 export function isClientReference(reference: Object): boolean {
   return reference.$$typeof === CLIENT_REFERENCE_TAG;
 }
 
-export function resolveModuleMetaData<T>(
-  config: BundlerConfig,
+export function isServerReference(reference: Object): boolean {
+  return reference.$$typeof === SERVER_REFERENCE_TAG;
+}
+
+export function resolveClientReferenceMetadata<T>(
+  config: ClientManifest,
   clientReference: ClientReference<T>,
-): ModuleMetaData {
-  const resolvedModuleData =
-    config.clientManifest[clientReference.filepath][clientReference.name];
-  if (clientReference.async) {
+): ClientReferenceMetadata {
+  const resolvedModuleData = config[clientReference.$$id];
+  if (clientReference.$$async) {
     return {
       id: resolvedModuleData.id,
       chunks: resolvedModuleData.chunks,
@@ -67,4 +69,18 @@ export function resolveModuleMetaData<T>(
   } else {
     return resolvedModuleData;
   }
+}
+
+export function getServerReferenceId<T>(
+  config: ClientManifest,
+  serverReference: ServerReference<T>,
+): ServerReferenceId {
+  return serverReference.$$id;
+}
+
+export function getServerReferenceBoundArguments<T>(
+  config: ClientManifest,
+  serverReference: ServerReference<T>,
+): null | Array<ReactClientValue> {
+  return serverReference.$$bound;
 }

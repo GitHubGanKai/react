@@ -8,18 +8,22 @@
  * @flow
  */
 
-import type {BrowserTheme} from 'react-devtools-shared/src/devtools/views/DevTools';
+import type {BrowserTheme} from './devtools/views/DevTools';
 import type {
-  RendererID,
-  ReactRenderer,
-  Handler,
   DevToolsHook,
-} from 'react-devtools-shared/src/backend/types';
+  Handler,
+  ReactRenderer,
+  RendererID,
+  RendererInterface,
+} from './backend/types';
 
 import {
   patchConsoleUsingWindowValues,
   registerRenderer as registerRendererWithConsole,
 } from './backend/console';
+import {attach} from './backend/renderer';
+import {SESSION_STORAGE_RELOAD_AND_PROFILE_KEY} from './constants';
+import {sessionStorageGetItem} from './storage';
 
 declare var window: any;
 
@@ -364,8 +368,9 @@ export function installHook(target: any): DevToolsHook | null {
 
     // If we have just reloaded to profile, we need to inject the renderer interface before the app loads.
     // Otherwise the renderer won't yet exist and we can skip this step.
-    const attach = target.__REACT_DEVTOOLS_ATTACH__;
-    if (typeof attach === 'function') {
+    if (
+      sessionStorageGetItem(SESSION_STORAGE_RELOAD_AND_PROFILE_KEY) === 'true'
+    ) {
       const rendererInterface = attach(hook, id, renderer, target);
       hook.rendererInterfaces.set(id, rendererInterface);
     }
@@ -519,9 +524,9 @@ export function installHook(target: any): DevToolsHook | null {
 
   // TODO: More meaningful names for "rendererInterfaces" and "renderers".
   const fiberRoots: {[RendererID]: Set<mixed>} = {};
-  const rendererInterfaces = new Map();
+  const rendererInterfaces = new Map<RendererID, RendererInterface>();
   const listeners: {[string]: Array<Handler>} = {};
-  const renderers = new Map();
+  const renderers = new Map<RendererID, ReactRenderer>();
 
   const hook: DevToolsHook = {
     rendererInterfaces,

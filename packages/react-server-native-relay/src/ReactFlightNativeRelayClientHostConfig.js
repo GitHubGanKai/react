@@ -11,7 +11,7 @@ import type {JSONValue, ResponseBase} from 'react-client/src/ReactFlightClient';
 
 import type {JSResourceReference} from 'JSResourceReference';
 
-import type {ModuleMetaData} from 'ReactFlightNativeRelayClientIntegration';
+import type {ClientReferenceMetadata} from 'ReactFlightNativeRelayClientIntegration';
 
 export type ClientReference<T> = JSResourceReference<T>;
 
@@ -29,29 +29,42 @@ import {resolveClientReference as resolveClientReferenceImpl} from 'ReactFlightN
 
 import isArray from 'shared/isArray';
 
-export type {ModuleMetaData} from 'ReactFlightNativeRelayClientIntegration';
+export type {ClientReferenceMetadata} from 'ReactFlightNativeRelayClientIntegration';
 
-export type BundlerConfig = null;
+export type SSRManifest = null;
+export type ServerManifest = null;
+export type ServerReferenceId = string;
 
 export type UninitializedModel = JSONValue;
 
 export type Response = ResponseBase;
 
 export function resolveClientReference<T>(
-  bundlerConfig: BundlerConfig,
-  moduleData: ModuleMetaData,
+  bundlerConfig: SSRManifest,
+  metadata: ClientReferenceMetadata,
 ): ClientReference<T> {
-  return resolveClientReferenceImpl(moduleData);
+  return resolveClientReferenceImpl(metadata);
 }
 
-// $FlowFixMe[missing-local-annot]
-function parseModelRecursively(response: Response, parentObj, key, value) {
+export function resolveServerReference<T>(
+  bundlerConfig: ServerManifest,
+  id: ServerReferenceId,
+): ClientReference<T> {
+  throw new Error('Not implemented.');
+}
+
+function parseModelRecursively(
+  response: Response,
+  parentObj: {+[key: string]: JSONValue} | $ReadOnlyArray<JSONValue>,
+  key: string,
+  value: JSONValue,
+): $FlowFixMe {
   if (typeof value === 'string') {
     return parseModelString(response, parentObj, key, value);
   }
   if (typeof value === 'object' && value !== null) {
     if (isArray(value)) {
-      const parsedValue = [];
+      const parsedValue: Array<$FlowFixMe> = [];
       for (let i = 0; i < value.length; i++) {
         (parsedValue: any)[i] = parseModelRecursively(
           response,

@@ -64,7 +64,10 @@ ByteSize
 
 // TODO: Implement HTMLData, BlobData and URLData.
 
-import type {Request, ReactModel} from 'react-server/src/ReactFlightServer';
+import type {
+  Request,
+  ReactClientValue,
+} from 'react-server/src/ReactFlightServer';
 
 import {stringToChunk} from './ReactServerStreamConfig';
 
@@ -124,8 +127,9 @@ export function processErrorChunkDev(
 export function processModelChunk(
   request: Request,
   id: number,
-  model: ReactModel,
+  model: ReactClientValue,
 ): Chunk {
+  // $FlowFixMe[incompatible-type] stringify can return null
   const json: string = stringify(model, request.toJSON);
   const row = id.toString(16) + ':' + json + '\n';
   return stringToChunk(row);
@@ -141,12 +145,13 @@ export function processReferenceChunk(
   return stringToChunk(row);
 }
 
-export function processModuleChunk(
+export function processImportChunk(
   request: Request,
   id: number,
-  moduleMetaData: ReactModel,
+  clientReferenceMetadata: ReactClientValue,
 ): Chunk {
-  const json: string = stringify(moduleMetaData);
+  // $FlowFixMe[incompatible-type] stringify can return null
+  const json: string = stringify(clientReferenceMetadata);
   const row = serializeRowHeader('I', id) + json + '\n';
   return stringToChunk(row);
 }

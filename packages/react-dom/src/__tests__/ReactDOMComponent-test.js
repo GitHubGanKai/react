@@ -24,6 +24,10 @@ describe('ReactDOMComponent', () => {
     ReactTestUtils = require('react-dom/test-utils');
   });
 
+  afterEach(() => {
+    jest.restoreAllMocks();
+  });
+
   describe('updateDOM', () => {
     it('should handle className', () => {
       const container = document.createElement('div');
@@ -529,29 +533,17 @@ describe('ReactDOMComponent', () => {
         expect(node.hasAttribute('action')).toBe(false);
       });
 
-      it('should not add an empty formAction attribute', () => {
+      it('allows empty string of a formAction to override the default of a parent', () => {
         const container = document.createElement('div');
-        expect(() =>
-          ReactDOM.render(<button formAction="" />, container),
-        ).toErrorDev(
-          'An empty string ("") was passed to the formAction attribute. ' +
-            'To fix this, either do not render the element at all ' +
-            'or pass null to formAction instead of an empty string.',
+        ReactDOM.render(
+          <form action="hello">
+            <button formAction="" />,
+          </form>,
+          container,
         );
-        const node = container.firstChild;
-        expect(node.hasAttribute('formAction')).toBe(false);
-
-        ReactDOM.render(<button formAction="abc" />, container);
-        expect(node.hasAttribute('formAction')).toBe(true);
-
-        expect(() =>
-          ReactDOM.render(<button formAction="" />, container),
-        ).toErrorDev(
-          'An empty string ("") was passed to the formAction attribute. ' +
-            'To fix this, either do not render the element at all ' +
-            'or pass null to formAction instead of an empty string.',
-        );
-        expect(node.hasAttribute('formAction')).toBe(false);
+        const node = container.firstChild.firstChild;
+        expect(node.hasAttribute('formaction')).toBe(true);
+        expect(node.getAttribute('formaction')).toBe('');
       });
 
       it('should not filter attributes for custom elements', () => {
@@ -1239,7 +1231,7 @@ describe('ReactDOMComponent', () => {
 
       if (__DEV__) {
         expect(console.log).toHaveBeenCalledTimes(1);
-        expect(console.log.calls.argsFor(0)[0]).toContain('onError called');
+        expect(console.log.mock.calls[0][0]).toContain('onError called');
       }
     });
 
@@ -1464,7 +1456,7 @@ describe('ReactDOMComponent', () => {
 
     it('should support custom elements which extend native elements', () => {
       const container = document.createElement('div');
-      spyOnDevAndProd(document, 'createElement').and.callThrough();
+      spyOnDevAndProd(document, 'createElement');
       ReactDOM.render(<div is="custom-div" />, container);
       expect(document.createElement).toHaveBeenCalledWith('div', {
         is: 'custom-div',
@@ -1496,8 +1488,8 @@ describe('ReactDOMComponent', () => {
 
       if (__DEV__) {
         expect(console.log).toHaveBeenCalledTimes(2);
-        expect(console.log.calls.argsFor(0)[0]).toContain('onError called');
-        expect(console.log.calls.argsFor(1)[0]).toContain('onLoad called');
+        expect(console.log.mock.calls[0][0]).toContain('onError called');
+        expect(console.log.mock.calls[1][0]).toContain('onLoad called');
       }
     });
 

@@ -15,12 +15,12 @@ import {
   ClassComponent,
   FunctionComponent,
   HostComponent,
-  HostResource,
+  HostHoistable,
   HostSingleton,
   HostText,
 } from 'react-reconciler/src/ReactWorkTags';
 import {SyntheticEvent} from 'react-dom-bindings/src/events/SyntheticEvent';
-import {ELEMENT_NODE} from 'react-dom-bindings/src/shared/HTMLNodeType';
+import {ELEMENT_NODE} from 'react-dom-bindings/src/client/HTMLNodeType';
 import {
   rethrowCaughtError,
   invokeGuardedCallbackAndCatchFirstError,
@@ -65,7 +65,7 @@ function findAllInRenderedFiberTreeInternal(fiber, test) {
       node.tag === HostText ||
       node.tag === ClassComponent ||
       node.tag === FunctionComponent ||
-      (enableFloat ? node.tag === HostResource : false) ||
+      (enableFloat ? node.tag === HostHoistable : false) ||
       (enableHostSingletons ? node.tag === HostSingleton : false)
     ) {
       const publicInst = node.stateNode;
@@ -392,7 +392,7 @@ function executeDispatchesInOrder(event) {
  * @param {?object} event Synthetic event to be dispatched.
  * @private
  */
-const executeDispatchesAndRelease = function (event /* ReactSyntheticEvent */) {
+function executeDispatchesAndRelease(event /* ReactSyntheticEvent */) {
   if (event) {
     executeDispatchesInOrder(event);
 
@@ -400,7 +400,7 @@ const executeDispatchesAndRelease = function (event /* ReactSyntheticEvent */) {
       event.constructor.release(event);
     }
   }
-};
+}
 
 function isInteractive(tag) {
   return (

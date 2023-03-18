@@ -66,7 +66,7 @@ import {
   COMMENT_NODE,
   DOCUMENT_NODE,
   DOCUMENT_FRAGMENT_NODE,
-} from 'react-dom-bindings/src/shared/HTMLNodeType';
+} from 'react-dom-bindings/src/client/HTMLNodeType';
 
 import {
   createContainer,
@@ -385,6 +385,7 @@ export function isValidContainerLegacy(node: any): boolean {
 function warnIfReactDOMContainerInDEV(container: any) {
   if (__DEV__) {
     if (
+      !enableHostSingletons &&
       container.nodeType === ELEMENT_NODE &&
       ((container: any): Element).tagName &&
       ((container: any): Element).tagName.toUpperCase() === 'BODY'
