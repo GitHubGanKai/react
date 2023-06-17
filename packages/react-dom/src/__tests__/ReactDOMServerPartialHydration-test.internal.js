@@ -19,6 +19,7 @@ let ReactFeatureFlags;
 let Suspense;
 let SuspenseList;
 let Offscreen;
+let useSyncExternalStore;
 let act;
 let IdleEventPriority;
 let waitForAll;
@@ -113,6 +114,7 @@ describe('ReactDOMServerPartialHydration', () => {
     Scheduler = require('scheduler');
     Suspense = React.Suspense;
     Offscreen = React.unstable_Offscreen;
+    useSyncExternalStore = React.useSyncExternalStore;
     if (gate(flags => flags.enableSuspenseList)) {
       SuspenseList = React.SuspenseList;
     }
@@ -310,13 +312,7 @@ describe('ReactDOMServerPartialHydration', () => {
           Scheduler.log(error.message);
         },
       });
-      await waitForAll([
-        'Suspend',
-        'Component',
-        'Component',
-        'Component',
-        'Component',
-      ]);
+      await waitForAll(['Suspend']);
       jest.runAllTimers();
 
       // Unchanged
@@ -480,6 +476,26 @@ describe('ReactDOMServerPartialHydration', () => {
   });
 
   it('recovers with client render when server rendered additional nodes at suspense root', async () => {
+    function CheckIfHydrating({children}) {
+      // This is a trick to check whether we're hydrating or not, since React
+      // doesn't expose that information currently except
+      // via useSyncExternalStore.
+      let serverOrClient = '(unknown)';
+      useSyncExternalStore(
+        () => {},
+        () => {
+          serverOrClient = 'Client rendered';
+          return null;
+        },
+        () => {
+          serverOrClient = 'Server rendered';
+          return null;
+        },
+      );
+      Scheduler.log(serverOrClient);
+      return null;
+    }
+
     const ref = React.createRef();
     function App({hasB}) {
       return (
@@ -487,6 +503,7 @@ describe('ReactDOMServerPartialHydration', () => {
           <Suspense fallback="Loading...">
             <span ref={ref}>A</span>
             {hasB ? <span>B</span> : null}
+            <CheckIfHydrating />
           </Suspense>
           <div>Sibling</div>
         </div>
@@ -494,6 +511,7 @@ describe('ReactDOMServerPartialHydration', () => {
     }
 
     const finalHTML = ReactDOMServer.renderToString(<App hasB={true} />);
+    assertLog(['Server rendered']);
 
     const container = document.createElement('div');
     container.innerHTML = finalHTML;
@@ -514,12 +532,12 @@ describe('ReactDOMServerPartialHydration', () => {
       });
     }).toErrorDev('Did not expect server HTML to contain a <span> in <div>');
 
-    jest.runAllTimers();
-
     expect(container.innerHTML).toContain('<span>A</span>');
     expect(container.innerHTML).not.toContain('<span>B</span>');
 
     assertLog([
+      'Server rendered',
+      'Client rendered',
       'There was an error while hydrating this Suspense boundary. ' +
         'Switched to client rendering.',
     ]);
@@ -1391,7 +1409,7 @@ describe('ReactDOMServerPartialHydration', () => {
       );
 
       // This will throw it away and rerender.
-      await waitForAll(['Child', 'Sibling']);
+      await waitForAll(['Child']);
 
       expect(container.textContent).toBe('Hello');
 
@@ -2018,7 +2036,14 @@ describe('ReactDOMServerPartialHydration', () => {
     suspend = true;
 
     await act(async () => {
-      await waitFor(['Before', 'After']);
+      if (gate(flags => flags.forceConcurrentByDefaultForTesting)) {
+        await waitFor(['Before']);
+        // This took a long time to render.
+        Scheduler.unstable_advanceTime(1000);
+        await waitFor(['After']);
+      } else {
+        await waitFor(['Before', 'After']);
+      }
 
       // This will cause us to skip the second row completely.
     });
@@ -2374,18 +2399,9 @@ describe('ReactDOMServerPartialHydration', () => {
       await promise;
     });
 
-    if (
-      gate(
-        flags =>
-          flags.enableCapturePhaseSelectiveHydrationWithoutDiscreteEventReplay,
-      )
-    ) {
-      expect(clicks).toBe(0);
-      expect(container.textContent).toBe('Click meHello');
-    } else {
-      expect(clicks).toBe(1);
-      expect(container.textContent).toBe('Hello');
-    }
+    expect(clicks).toBe(0);
+    expect(container.textContent).toBe('Click meHello');
+
     document.body.removeChild(container);
   });
 
@@ -2466,16 +2482,7 @@ describe('ReactDOMServerPartialHydration', () => {
       await promise;
     });
 
-    if (
-      gate(
-        flags =>
-          flags.enableCapturePhaseSelectiveHydrationWithoutDiscreteEventReplay,
-      )
-    ) {
-      expect(onEvent).toHaveBeenCalledTimes(0);
-    } else {
-      expect(onEvent).toHaveBeenCalledTimes(2);
-    }
+    expect(onEvent).toHaveBeenCalledTimes(0);
 
     document.body.removeChild(container);
   });
@@ -2555,16 +2562,7 @@ describe('ReactDOMServerPartialHydration', () => {
       await promise;
     });
 
-    if (
-      gate(
-        flags =>
-          flags.enableCapturePhaseSelectiveHydrationWithoutDiscreteEventReplay,
-      )
-    ) {
-      expect(clicks).toBe(0);
-    } else {
-      expect(clicks).toBe(2);
-    }
+    expect(clicks).toBe(0);
 
     document.body.removeChild(container);
   });
@@ -2648,16 +2646,8 @@ describe('ReactDOMServerPartialHydration', () => {
       resolve();
       await promise;
     });
-    if (
-      gate(
-        flags =>
-          flags.enableCapturePhaseSelectiveHydrationWithoutDiscreteEventReplay,
-      )
-    ) {
-      expect(onEvent).toHaveBeenCalledTimes(0);
-    } else {
-      expect(onEvent).toHaveBeenCalledTimes(2);
-    }
+
+    expect(onEvent).toHaveBeenCalledTimes(0);
 
     document.body.removeChild(container);
   });
@@ -2728,19 +2718,8 @@ describe('ReactDOMServerPartialHydration', () => {
       await promise;
     });
 
-    if (
-      gate(
-        flags =>
-          flags.enableCapturePhaseSelectiveHydrationWithoutDiscreteEventReplay,
-      )
-    ) {
-      expect(clicksOnChild).toBe(0);
-      expect(clicksOnParent).toBe(0);
-    } else {
-      expect(clicksOnChild).toBe(1);
-      // This will be zero due to the stopPropagation.
-      expect(clicksOnParent).toBe(0);
-    }
+    expect(clicksOnChild).toBe(0);
+    expect(clicksOnParent).toBe(0);
 
     document.body.removeChild(container);
   });
@@ -2812,17 +2791,7 @@ describe('ReactDOMServerPartialHydration', () => {
       await promise;
     });
 
-    // We're now full hydrated.
-    if (
-      gate(
-        flags =>
-          flags.enableCapturePhaseSelectiveHydrationWithoutDiscreteEventReplay,
-      )
-    ) {
-      expect(clicks).toBe(0);
-    } else {
-      expect(clicks).toBe(1);
-    }
+    expect(clicks).toBe(0);
 
     document.body.removeChild(parentContainer);
   });
@@ -3087,19 +3056,9 @@ describe('ReactDOMServerPartialHydration', () => {
       await promise;
     });
 
-    if (
-      gate(
-        flags =>
-          flags.enableCapturePhaseSelectiveHydrationWithoutDiscreteEventReplay,
-      )
-    ) {
-      // discrete event not replayed
-      expect(submits).toBe(0);
-      expect(container.textContent).toBe('Click meHello');
-    } else {
-      expect(submits).toBe(1);
-      expect(container.textContent).toBe('Hello');
-    }
+    // discrete event not replayed
+    expect(submits).toBe(0);
+    expect(container.textContent).toBe('Click meHello');
 
     document.body.removeChild(container);
   });

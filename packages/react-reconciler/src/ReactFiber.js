@@ -14,7 +14,7 @@ import type {RootTag} from './ReactRootTags';
 import type {WorkTag} from './ReactWorkTags';
 import type {TypeOfMode} from './ReactTypeOfMode';
 import type {Lanes} from './ReactFiberLane';
-import type {SuspenseInstance} from './ReactFiberHostConfig';
+import type {SuspenseInstance} from './ReactFiberConfig';
 import type {
   OffscreenProps,
   OffscreenInstance,
@@ -26,13 +26,14 @@ import {
   supportsSingletons,
   isHostHoistableType,
   isHostSingletonType,
-} from './ReactFiberHostConfig';
+} from './ReactFiberConfig';
 import {
   createRootStrictEffectsByDefault,
   enableCache,
   enableProfilerTimer,
   enableScopeAPI,
   enableLegacyHidden,
+  forceConcurrentByDefaultForTesting,
   allowConcurrentByDefault,
   enableTransitionTracing,
   enableDebugTracing,
@@ -230,7 +231,7 @@ function createFiber(
   key: null | string,
   mode: TypeOfMode,
 ): Fiber {
-  // $FlowFixMe: the shapes are exact here but Flow doesn't like constructors
+  // $FlowFixMe[invalid-constructor]: the shapes are exact here but Flow doesn't like constructors
   return new FiberNode(tag, pendingProps, key, mode);
 }
 
@@ -458,6 +459,11 @@ export function createHostRootFiber(
       mode |= StrictLegacyMode | StrictEffectsMode;
     }
     if (
+      // We only use this flag for our repo tests to check both behaviors.
+      forceConcurrentByDefaultForTesting
+    ) {
+      mode |= ConcurrentUpdatesByDefaultMode;
+    } else if (
       // Only for internal experiments.
       allowConcurrentByDefault &&
       concurrentUpdatesByDefaultOverride
@@ -547,29 +553,29 @@ export function createFiberFromTypeAndProps(
         if (enableLegacyHidden) {
           return createFiberFromLegacyHidden(pendingProps, mode, lanes, key);
         }
-      // eslint-disable-next-line no-fallthrough
+      // Fall through
       case REACT_SCOPE_TYPE:
         if (enableScopeAPI) {
           return createFiberFromScope(type, pendingProps, mode, lanes, key);
         }
-      // eslint-disable-next-line no-fallthrough
+      // Fall through
       case REACT_CACHE_TYPE:
         if (enableCache) {
           return createFiberFromCache(pendingProps, mode, lanes, key);
         }
-      // eslint-disable-next-line no-fallthrough
+      // Fall through
       case REACT_TRACING_MARKER_TYPE:
         if (enableTransitionTracing) {
           return createFiberFromTracingMarker(pendingProps, mode, lanes, key);
         }
-      // eslint-disable-next-line no-fallthrough
+      // Fall through
       case REACT_DEBUG_TRACING_MODE_TYPE:
         if (enableDebugTracing) {
           fiberTag = Mode;
           mode |= DebugTracingMode;
           break;
         }
-      // eslint-disable-next-line no-fallthrough
+      // Fall through
       default: {
         if (typeof type === 'object' && type !== null) {
           switch (type.$$typeof) {

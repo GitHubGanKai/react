@@ -17,10 +17,12 @@ import {
 import getComponentNameFromType from 'shared/getComponentNameFromType';
 import {HostComponent} from 'react-reconciler/src/ReactWorkTags';
 // Module provided by RN:
-import {UIManager} from 'react-native/Libraries/ReactPrivate/ReactNativePrivateInterface';
+import {
+  UIManager,
+  getNodeFromPublicInstance,
+} from 'react-native/Libraries/ReactPrivate/ReactNativePrivateInterface';
 import {enableGetInspectorDataForInstanceInProduction} from 'shared/ReactFeatureFlags';
 import {getClosestInstanceFromNode} from './ReactNativeComponentTree';
-import {getInternalInstanceHandleFromPublicInstance} from './ReactFabricPublicInstanceUtils';
 import {getNodeFromInternalInstanceHandle} from './ReactNativePublicCompat';
 
 const emptyObject = {};
@@ -115,9 +117,11 @@ function getInspectorDataForInstance(
       selectedIndex,
       source,
     };
-  } else {
-    return (null: any);
   }
+
+  throw new Error(
+    'getInspectorDataForInstance() is not available in production',
+  );
 }
 
 function getOwnerHierarchy(instance: any) {
@@ -151,34 +155,11 @@ function traverseOwnerTreeUp(
   }
 }
 
-function getInspectorDataForViewTag(viewTag: number): Object {
+function getInspectorDataForViewTag(viewTag: number): InspectorData {
   if (__DEV__) {
     const closestInstance = getClosestInstanceFromNode(viewTag);
 
-    // Handle case where user clicks outside of ReactNative
-    if (!closestInstance) {
-      return {
-        hierarchy: [],
-        props: emptyObject,
-        selectedIndex: null,
-        source: null,
-      };
-    }
-
-    const fiber = findCurrentFiberUsingSlowPath(closestInstance);
-    const fiberHierarchy = getOwnerHierarchy(fiber);
-    const instance = lastNonHostInstance(fiberHierarchy);
-    const hierarchy = createHierarchy(fiberHierarchy);
-    const props = getHostProps(instance);
-    const source = instance._debugSource;
-    const selectedIndex = fiberHierarchy.indexOf(instance);
-
-    return {
-      hierarchy,
-      props,
-      selectedIndex,
-      source,
-    };
+    return getInspectorDataForInstance(closestInstance);
   } else {
     throw new Error(
       'getInspectorDataForViewTag() is not available in production',
@@ -196,12 +177,7 @@ function getInspectorDataForViewAtPoint(
   if (__DEV__) {
     let closestInstance = null;
 
-    const fabricInstanceHandle =
-      getInternalInstanceHandleFromPublicInstance(inspectedView);
-    const fabricNode =
-      fabricInstanceHandle != null
-        ? getNodeFromInternalInstanceHandle(fabricInstanceHandle)
-        : null;
+    const fabricNode = getNodeFromPublicInstance(inspectedView);
     if (fabricNode) {
       // For Fabric we can look up the instance handle directly and measure it.
       nativeFabricUIManager.findNodeAtPoint(

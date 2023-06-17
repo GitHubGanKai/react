@@ -7,7 +7,7 @@
  * @flow
  */
 
-const acorn = require('acorn');
+const acorn = require('acorn-loose');
 
 const url = require('url');
 
@@ -270,7 +270,6 @@ module.exports = function register() {
         $$id: {value: moduleId},
         $$async: {value: false},
       });
-      // $FlowFixMe[incompatible-call] found when upgrading Flow
       this.exports = new Proxy(clientReference, proxyHandlers);
     }
 

@@ -1,5 +1,5 @@
 /**
- * Copyright (c) Facebook, Inc. and its affiliates.
+ * Copyright (c) Meta Platforms, Inc. and its affiliates.
  *
  * This source code is licensed under the MIT license found in the
  * LICENSE file in the root directory of this source tree.
@@ -57,7 +57,7 @@ export function cache<A: Iterable<mixed>, T>(fn: (...A) => T): (...A) => T {
     const dispatcher = ReactCurrentCache.current;
     if (!dispatcher) {
       // If there is no dispatcher, then we treat this as not being cached.
-      // $FlowFixMe: We don't want to use rest arguments since we transpile the code.
+      // $FlowFixMe[incompatible-call]: We don't want to use rest arguments since we transpile the code.
       return fn.apply(null, arguments);
     }
     const fnMap: WeakMap<any, CacheNode<T>> = dispatcher.getCacheForType(
@@ -111,7 +111,7 @@ export function cache<A: Iterable<mixed>, T>(fn: (...A) => T): (...A) => T {
       throw cacheNode.v;
     }
     try {
-      // $FlowFixMe: We don't want to use rest arguments since we transpile the code.
+      // $FlowFixMe[incompatible-call]: We don't want to use rest arguments since we transpile the code.
       const result = fn.apply(null, arguments);
       const terminatedNode: TerminatedCacheNode<T> = (cacheNode: any);
       terminatedNode.s = TERMINATED;

@@ -12,10 +12,10 @@
 let React;
 let ReactDOM;
 let ReactDOMClient;
-let ReactFeatureFlags;
 let Scheduler;
 let act;
 let waitForAll;
+let waitForDiscrete;
 let assertLog;
 
 const setUntrackedChecked = Object.getOwnPropertyDescriptor(
@@ -38,7 +38,6 @@ describe('ChangeEventPlugin', () => {
 
   beforeEach(() => {
     jest.resetModules();
-    ReactFeatureFlags = require('shared/ReactFeatureFlags');
     // TODO pull this into helper method, reduce repetition.
     // mock the browser APIs which are used in schedule:
     // - calling 'window.postMessage' should actually fire postmessage handlers
@@ -65,6 +64,7 @@ describe('ChangeEventPlugin', () => {
 
     const InternalTestUtils = require('internal-test-utils');
     waitForAll = InternalTestUtils.waitForAll;
+    waitForDiscrete = InternalTestUtils.waitForDiscrete;
     assertLog = InternalTestUtils.assertLog;
 
     container = document.createElement('div');
@@ -98,13 +98,8 @@ describe('ChangeEventPlugin', () => {
     node.dispatchEvent(new Event('input', {bubbles: true, cancelable: true}));
     node.dispatchEvent(new Event('change', {bubbles: true, cancelable: true}));
 
-    if (ReactFeatureFlags.disableInputAttributeSyncing) {
-      // TODO: figure out why. This might be a bug.
-      expect(called).toBe(1);
-    } else {
-      // There should be no React change events because the value stayed the same.
-      expect(called).toBe(0);
-    }
+    // There should be no React change events because the value stayed the same.
+    expect(called).toBe(0);
   });
 
   it('should consider initial text value to be current (capture)', () => {
@@ -122,13 +117,44 @@ describe('ChangeEventPlugin', () => {
     node.dispatchEvent(new Event('input', {bubbles: true, cancelable: true}));
     node.dispatchEvent(new Event('change', {bubbles: true, cancelable: true}));
 
-    if (ReactFeatureFlags.disableInputAttributeSyncing) {
-      // TODO: figure out why. This might be a bug.
-      expect(called).toBe(1);
-    } else {
-      // There should be no React change events because the value stayed the same.
-      expect(called).toBe(0);
+    // There should be no React change events because the value stayed the same.
+    expect(called).toBe(0);
+  });
+
+  it('should not invoke a change event for textarea same value', () => {
+    let called = 0;
+
+    function cb(e) {
+      called++;
+      expect(e.type).toBe('change');
     }
+
+    const node = ReactDOM.render(
+      <textarea onChange={cb} defaultValue="initial" />,
+      container,
+    );
+    node.dispatchEvent(new Event('input', {bubbles: true, cancelable: true}));
+    node.dispatchEvent(new Event('change', {bubbles: true, cancelable: true}));
+    // There should be no React change events because the value stayed the same.
+    expect(called).toBe(0);
+  });
+
+  it('should not invoke a change event for textarea same value (capture)', () => {
+    let called = 0;
+
+    function cb(e) {
+      called++;
+      expect(e.type).toBe('change');
+    }
+
+    const node = ReactDOM.render(
+      <textarea onChangeCapture={cb} defaultValue="initial" />,
+      container,
+    );
+    node.dispatchEvent(new Event('input', {bubbles: true, cancelable: true}));
+    node.dispatchEvent(new Event('change', {bubbles: true, cancelable: true}));
+    // There should be no React change events because the value stayed the same.
+    expect(called).toBe(0);
   });
 
   it('should consider initial checkbox checked=true to be current', () => {
@@ -730,8 +756,7 @@ describe('ChangeEventPlugin', () => {
       );
 
       // Flush microtask queue.
-      await null;
-      assertLog(['render: ']);
+      await waitForDiscrete(['render: ']);
       expect(input.value).toBe('');
     });
 

@@ -268,6 +268,7 @@ describe('useMutableSourceHydration', () => {
             },
           });
         });
+
         await waitFor(['a:one']);
         source.value = 'two';
       });

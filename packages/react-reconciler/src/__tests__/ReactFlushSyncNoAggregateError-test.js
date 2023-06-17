@@ -3,7 +3,9 @@ let ReactNoop;
 let Scheduler;
 let act;
 let assertLog;
-let waitForThrow;
+
+let overrideQueueMicrotask;
+let flushFakeMicrotasks;
 
 // TODO: Migrate tests to React DOM instead of React Noop
 
@@ -13,6 +15,26 @@ describe('ReactFlushSync (AggregateError not available)', () => {
 
     global.AggregateError = undefined;
 
+    // When AggregateError is not available, the errors are rethrown in a
+    // microtask. This is an implementation detail but we want to test it here
+    // so override the global one.
+    const originalQueueMicrotask = queueMicrotask;
+    overrideQueueMicrotask = false;
+    const fakeMicrotaskQueue = [];
+    global.queueMicrotask = cb => {
+      if (overrideQueueMicrotask) {
+        fakeMicrotaskQueue.push(cb);
+      } else {
+        originalQueueMicrotask(cb);
+      }
+    };
+    flushFakeMicrotasks = () => {
+      while (fakeMicrotaskQueue.length > 0) {
+        const cb = fakeMicrotaskQueue.shift();
+        cb();
+      }
+    };
+
     React = require('react');
     ReactNoop = require('react-noop-renderer');
     Scheduler = require('scheduler');
@@ -20,7 +42,6 @@ describe('ReactFlushSync (AggregateError not available)', () => {
 
     const InternalTestUtils = require('internal-test-utils');
     assertLog = InternalTestUtils.assertLog;
-    waitForThrow = InternalTestUtils.waitForThrow;
   });
 
   function Text({text}) {
@@ -47,6 +68,8 @@ describe('ReactFlushSync (AggregateError not available)', () => {
     const aahh = new Error('AAHH!');
     const nooo = new Error('Noooooooooo!');
 
+    // Override the global queueMicrotask so we can test the behavior.
+    overrideQueueMicrotask = true;
     let error;
     try {
       ReactNoop.flushSync(() => {
@@ -70,10 +93,6 @@ describe('ReactFlushSync (AggregateError not available)', () => {
     // AggregateError is not available, React throws the first error, then
     // throws the remaining errors in separate tasks.
     expect(error).toBe(aahh);
-    // TODO: Currently the remaining error is rethrown in an Immediate Scheduler
-    // task, but this may change to a timer or microtask in the future. The
-    // exact mechanism is an implementation detail; they just need to be logged
-    // in the order the occurred.
-    await waitForThrow(nooo);
+    expect(flushFakeMicrotasks).toThrow(nooo);
   });
 });

@@ -14,7 +14,13 @@
 // -----------------------------------------------------------------------------
 
 export const enableComponentStackLocations = true;
-export const disableSchedulerTimeoutBasedOnReactExpirationTime = false;
+
+// -----------------------------------------------------------------------------
+// Killswitch
+//
+// Flags that exist solely to turn off a change in case it causes a regression
+// when it rolls out to prod. We should remove these as soon as possible.
+// -----------------------------------------------------------------------------
 
 // -----------------------------------------------------------------------------
 // Land or remove (moderate effort)
@@ -23,16 +29,8 @@ export const disableSchedulerTimeoutBasedOnReactExpirationTime = false;
 // like migrating internal callers or performance testing.
 // -----------------------------------------------------------------------------
 
-// This rolled out to 10% public in www, so we should be able to land, but some
-// internal tests need to be updated. The open source behavior is correct.
-export const skipUnmountedBoundaries = true;
-
 // TODO: Finish rolling out in www
 export const enableClientRenderFallbackOnTextMismatch = true;
-
-// TODO: Need to review this code one more time before landing
-export const enableCapturePhaseSelectiveHydrationWithoutDiscreteEventReplay =
-  true;
 
 // Recoil still uses useMutableSource in www, need to delete
 export const enableUseMutableSource = false;
@@ -44,6 +42,10 @@ export const enableSchedulerDebugging = false;
 
 // Need to remove didTimeout argument from Scheduler before landing
 export const disableSchedulerTimeoutInWorkLoop = false;
+
+// This will break some internal tests at Meta so we need to gate this until
+// those can be fixed.
+export const enableDeferRootSchedulingToMicrotask = true;
 
 // -----------------------------------------------------------------------------
 // Slated for removal in the future (significant effort)
@@ -83,6 +85,8 @@ export const enableLegacyCache = __EXPERIMENTAL__;
 export const enableCacheElement = __EXPERIMENTAL__;
 export const enableFetchInstrumentation = true;
 
+export const enableFormActions = __EXPERIMENTAL__;
+
 export const enableTransitionTracing = false;
 
 // No known bugs, but needs performance testing
@@ -102,8 +106,6 @@ export const enableHostSingletons = true;
 
 export const enableFloat = true;
 
-export const enableUseHook = true;
-
 // Enables unstable_useMemoCache hook, intended as a compilation target for
 // auto-memoization.
 export const enableUseMemoCacheHook = __EXPERIMENTAL__;
@@ -114,6 +116,13 @@ export const enableUseEffectEventHook = __EXPERIMENTAL__;
 // Enables DOM-server to stream its instruction set as data-attributes
 // (handled with an MutationObserver) instead of inline-scripts
 export const enableFizzExternalRuntime = true;
+
+// Performance related test
+export const diffInCommitPhase = __EXPERIMENTAL__;
+
+export const enableAsyncActions = __EXPERIMENTAL__;
+
+export const alwaysThrottleRetries = true;
 
 // -----------------------------------------------------------------------------
 // Chopping Block
@@ -135,19 +144,13 @@ export const disableLegacyContext = false;
 
 export const enableUseRefAccessWarning = false;
 
+// Enables time slicing for updates that aren't wrapped in startTransition.
+export const forceConcurrentByDefaultForTesting = false;
+
 export const enableUnifiedSyncLane = __EXPERIMENTAL__;
 
-// Adds an opt-in to time slicing for updates that aren't wrapped in
-// startTransition. Only relevant when enableSyncDefaultUpdates is disabled.
+// Adds an opt-in to time slicing for updates that aren't wrapped in startTransition.
 export const allowConcurrentByDefault = false;
-
-// Updates that occur in the render phase are not officially supported. But when
-// they do occur, we defer them to a subsequent render by picking a lane that's
-// not currently rendering. We treat them the same as if they came from an
-// interleaved event. Remove this flag once we have migrated to the
-// new behavior.
-// NOTE: Not sure if we'll end up doing this or not.
-export const deferRenderPhaseUpdateToNextBatch = false;
 
 // -----------------------------------------------------------------------------
 // React DOM Chopping Block
@@ -219,8 +222,6 @@ export const enableDebugTracing = false;
 // Track which Fiber(s) schedule render work.
 export const enableUpdaterTracking = __PROFILE__;
 
-// Only enabled in RN, related to enableComponentStackLocations
-export const disableNativeComponentFrames = false;
 export const enableServerContext = true;
 
 // Internal only.

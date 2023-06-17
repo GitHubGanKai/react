@@ -19,9 +19,10 @@ import {
 } from 'react-server/src/ReactFizzServer';
 
 import {
+  createResources,
   createResponseState,
   createRootFormatContext,
-} from 'react-dom-bindings/src/server/ReactDOMServerLegacyFormatConfig';
+} from 'react-dom-bindings/src/server/ReactFizzConfigDOMLegacy';
 
 import {Readable} from 'stream';
 
@@ -43,7 +44,6 @@ class ReactMarkupReadableStream extends Readable {
   // $FlowFixMe[missing-local-annot]
   _destroy(err, callback) {
     abort(this.request);
-    // $FlowFixMe: The type definition for the callback should allow undefined and null.
     callback(err);
   }
 
@@ -71,9 +71,15 @@ function renderToNodeStreamImpl(
     startFlowing(request, destination);
   }
   const destination = new ReactMarkupReadableStream();
+  const resources = createResources();
   const request = createRequest(
     children,
-    createResponseState(false, options ? options.identifierPrefix : undefined),
+    resources,
+    createResponseState(
+      resources,
+      false,
+      options ? options.identifierPrefix : undefined,
+    ),
     createRootFormatContext(),
     Infinity,
     onError,

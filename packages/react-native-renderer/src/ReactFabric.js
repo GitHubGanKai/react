@@ -40,6 +40,7 @@ import {
   sendAccessibilityEvent,
   getNodeFromInternalInstanceHandle,
 } from './ReactNativePublicCompat';
+import {getPublicInstanceFromInternalInstanceHandle} from './ReactFiberConfigFabric';
 
 // $FlowFixMe[missing-local-annot]
 function onRecoverableError(error) {
@@ -73,7 +74,6 @@ function render(
   }
   updateContainer(element, root, null, callback);
 
-  // $FlowFixMe Flow has hardcoded values for React DOM that don't work with RN
   return getPublicRootInstance(root);
 }
 
@@ -124,6 +124,10 @@ export {
   // This method allows it to acess the most recent shadow node for
   // the instance (it's only accessible through it).
   getNodeFromInternalInstanceHandle,
+  // Fabric native methods to traverse the host tree return the same internal
+  // instance handles we use to dispatch events. This provides a way to access
+  // the public instances we created from them (potentially created lazily).
+  getPublicInstanceFromInternalInstanceHandle,
 };
 
 injectIntoDevTools({
@@ -133,6 +137,7 @@ injectIntoDevTools({
   version: ReactVersion,
   rendererPackageName: 'react-native-renderer',
   rendererConfig: {
+    getInspectorDataForInstance,
     getInspectorDataForViewTag: getInspectorDataForViewTag,
     getInspectorDataForViewAtPoint: getInspectorDataForViewAtPoint.bind(
       null,

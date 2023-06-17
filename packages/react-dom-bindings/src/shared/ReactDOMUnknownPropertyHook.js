@@ -5,16 +5,14 @@
  * LICENSE file in the root directory of this source tree.
  */
 
-import {
-  ATTRIBUTE_NAME_CHAR,
-  BOOLEAN,
-  RESERVED,
-  shouldRemoveAttributeWithWarning,
-  getPropertyInfo,
-} from './DOMProperty';
-import isCustomComponent from './isCustomComponent';
+import {ATTRIBUTE_NAME_CHAR} from './isAttributeNameSafe';
+import isCustomElement from './isCustomElement';
 import possibleStandardNames from './possibleStandardNames';
 import hasOwnProperty from 'shared/hasOwnProperty';
+import {
+  enableCustomElementPropertySupport,
+  enableFormActions,
+} from 'shared/ReactFeatureFlags';
 
 const warnedProperties = {};
 const EVENT_NAME_REGEX = /^on./;
@@ -41,6 +39,21 @@ function validateProperty(tagName, name, value, eventRegistry) {
       );
       warnedProperties[name] = true;
       return true;
+    }
+
+    if (enableFormActions) {
+      // Actions are special because unlike events they can have other value types.
+      if (typeof value === 'function') {
+        if (tagName === 'form' && name === 'action') {
+          return true;
+        }
+        if (tagName === 'input' && name === 'formAction') {
+          return true;
+        }
+        if (tagName === 'button' && name === 'formAction') {
+          return true;
+        }
+      }
     }
 
     // We can't rely on the event system being injected on the server.
@@ -135,9 +148,6 @@ function validateProperty(tagName, name, value, eventRegistry) {
       return true;
     }
 
-    const propertyInfo = getPropertyInfo(name);
-    const isReserved = propertyInfo !== null && propertyInfo.type === RESERVED;
-
     // Known attributes should match the casing specified in the property config.
     if (possibleStandardNames.hasOwnProperty(lowerCasedName)) {
       const standardName = possibleStandardNames[lowerCasedName];
@@ -150,7 +160,7 @@ function validateProperty(tagName, name, value, eventRegistry) {
         warnedProperties[name] = true;
         return true;
       }
-    } else if (!isReserved && name !== lowerCasedName) {
+    } else if (name !== lowerCasedName) {
       // Unknown attributes should have lowercase casing since that's how they
       // will be cased anyway with server rendering.
       console.error(
@@ -166,75 +176,164 @@ function validateProperty(tagName, name, value, eventRegistry) {
       return true;
     }
 
-    if (
-      typeof value === 'boolean' &&
-      shouldRemoveAttributeWithWarning(name, value, propertyInfo, false)
-    ) {
-      if (value) {
-        console.error(
-          'Received `%s` for a non-boolean attribute `%s`.\n\n' +
-            'If you want to write it to the DOM, pass a string instead: ' +
-            '%s="%s" or %s={value.toString()}.',
-          value,
-          name,
-          name,
-          value,
-          name,
-        );
-      } else {
-        console.error(
-          'Received `%s` for a non-boolean attribute `%s`.\n\n' +
-            'If you want to write it to the DOM, pass a string instead: ' +
-            '%s="%s" or %s={value.toString()}.\n\n' +
-            'If you used to conditionally omit it with %s={condition && value}, ' +
-            'pass %s={condition ? value : undefined} instead.',
-          value,
-          name,
-          name,
-          value,
-          name,
-          name,
-          name,
-        );
-      }
-      warnedProperties[name] = true;
-      return true;
-    }
-
     // Now that we've validated casing, do not validate
     // data types for reserved props
-    if (isReserved) {
-      return true;
+    switch (name) {
+      case 'dangerouslySetInnerHTML':
+      case 'children':
+      case 'style':
+      case 'suppressContentEditableWarning':
+      case 'suppressHydrationWarning':
+      case 'defaultValue': // Reserved
+      case 'defaultChecked':
+      case 'innerHTML': {
+        return true;
+      }
+      case 'innerText': // Properties
+      case 'textContent':
+        if (enableCustomElementPropertySupport) {
+          return true;
+        }
     }
 
-    // Warn when a known attribute is a bad type
-    if (shouldRemoveAttributeWithWarning(name, value, propertyInfo, false)) {
-      warnedProperties[name] = true;
-      return false;
+    switch (typeof value) {
+      case 'boolean': {
+        switch (name) {
+          case 'autoFocus':
+          case 'checked':
+          case 'multiple':
+          case 'muted':
+          case 'selected':
+          case 'contentEditable':
+          case 'spellCheck':
+          case 'draggable':
+          case 'value':
+          case 'autoReverse':
+          case 'externalResourcesRequired':
+          case 'focusable':
+          case 'preserveAlpha':
+          case 'allowFullScreen':
+          case 'async':
+          case 'autoPlay':
+          case 'controls':
+          case 'default':
+          case 'defer':
+          case 'disabled':
+          case 'disablePictureInPicture':
+          case 'disableRemotePlayback':
+          case 'formNoValidate':
+          case 'hidden':
+          case 'loop':
+          case 'noModule':
+          case 'noValidate':
+          case 'open':
+          case 'playsInline':
+          case 'readOnly':
+          case 'required':
+          case 'reversed':
+          case 'scoped':
+          case 'seamless':
+          case 'itemScope':
+          case 'capture':
+          case 'download': {
+            // Boolean properties can accept boolean values
+            return true;
+          }
+          default: {
+            const prefix = name.toLowerCase().slice(0, 5);
+            if (prefix === 'data-' || prefix === 'aria-') {
+              return true;
+            }
+            if (value) {
+              console.error(
+                'Received `%s` for a non-boolean attribute `%s`.\n\n' +
+                  'If you want to write it to the DOM, pass a string instead: ' +
+                  '%s="%s" or %s={value.toString()}.',
+                value,
+                name,
+                name,
+                value,
+                name,
+              );
+            } else {
+              console.error(
+                'Received `%s` for a non-boolean attribute `%s`.\n\n' +
+                  'If you want to write it to the DOM, pass a string instead: ' +
+                  '%s="%s" or %s={value.toString()}.\n\n' +
+                  'If you used to conditionally omit it with %s={condition && value}, ' +
+                  'pass %s={condition ? value : undefined} instead.',
+                value,
+                name,
+                name,
+                value,
+                name,
+                name,
+                name,
+              );
+            }
+            warnedProperties[name] = true;
+            return true;
+          }
+        }
+      }
+      case 'function':
+      case 'symbol': // eslint-disable-line
+        // Warn when a known attribute is a bad type
+        warnedProperties[name] = true;
+        return false;
+      case 'string': {
+        // Warn when passing the strings 'false' or 'true' into a boolean prop
+        if (value === 'false' || value === 'true') {
+          switch (name) {
+            case 'checked':
+            case 'selected':
+            case 'multiple':
+            case 'muted':
+            case 'allowFullScreen':
+            case 'async':
+            case 'autoPlay':
+            case 'controls':
+            case 'default':
+            case 'defer':
+            case 'disabled':
+            case 'disablePictureInPicture':
+            case 'disableRemotePlayback':
+            case 'formNoValidate':
+            case 'hidden':
+            case 'loop':
+            case 'noModule':
+            case 'noValidate':
+            case 'open':
+            case 'playsInline':
+            case 'readOnly':
+            case 'required':
+            case 'reversed':
+            case 'scoped':
+            case 'seamless':
+            case 'itemScope': {
+              break;
+            }
+            default: {
+              return true;
+            }
+          }
+          console.error(
+            'Received the string `%s` for the boolean attribute `%s`. ' +
+              '%s ' +
+              'Did you mean %s={%s}?',
+            value,
+            name,
+            value === 'false'
+              ? 'The browser will interpret it as a truthy value.'
+              : 'Although this works, it will not work as expected if you pass the string "false".',
+            name,
+            value,
+          );
+          warnedProperties[name] = true;
+          return true;
+        }
+      }
     }
-
-    // Warn when passing the strings 'false' or 'true' into a boolean prop
-    if (
-      (value === 'false' || value === 'true') &&
-      propertyInfo !== null &&
-      propertyInfo.type === BOOLEAN
-    ) {
-      console.error(
-        'Received the string `%s` for the boolean attribute `%s`. ' +
-          '%s ' +
-          'Did you mean %s={%s}?',
-        value,
-        name,
-        value === 'false'
-          ? 'The browser will interpret it as a truthy value.'
-          : 'Although this works, it will not work as expected if you pass the string "false".',
-        name,
-        value,
-      );
-      warnedProperties[name] = true;
-      return true;
-    }
-
     return true;
   }
 }
@@ -273,7 +372,7 @@ function warnUnknownProperties(type, props, eventRegistry) {
 }
 
 export function validateProperties(type, props, eventRegistry) {
-  if (isCustomComponent(type, props)) {
+  if (isCustomElement(type, props) || typeof props.is === 'string') {
     return;
   }
   warnUnknownProperties(type, props, eventRegistry);

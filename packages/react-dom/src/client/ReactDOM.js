@@ -11,7 +11,7 @@ import type {ReactNodeList} from 'shared/ReactTypes';
 import type {
   Container,
   PublicInstance,
-} from 'react-dom-bindings/src/client/ReactDOMHostConfig';
+} from 'react-dom-bindings/src/client/ReactFiberConfigDOM';
 import type {
   RootType,
   HydrateRootOptions,
@@ -60,16 +60,17 @@ export {
   preconnect,
   preload,
   preinit,
-} from 'react-dom-bindings/src/shared/ReactDOMFloat';
+} from '../shared/ReactDOMFloat';
+export {useFormStatus} from 'react-dom-bindings/src/shared/ReactDOMFormActions';
 
 if (__DEV__) {
   if (
     typeof Map !== 'function' ||
-    // $FlowFixMe Flow incorrectly thinks Map has no prototype
+    // $FlowFixMe[prop-missing] Flow incorrectly thinks Map has no prototype
     Map.prototype == null ||
     typeof Map.prototype.forEach !== 'function' ||
     typeof Set !== 'function' ||
-    // $FlowFixMe Flow incorrectly thinks Set has no prototype
+    // $FlowFixMe[prop-missing] Flow incorrectly thinks Set has no prototype
     Set.prototype == null ||
     typeof Set.prototype.clear !== 'function' ||
     typeof Set.prototype.forEach !== 'function'
@@ -91,7 +92,7 @@ function createPortal(
   }
 
   // TODO: pass ReactDOM portal implementation as third argument
-  // $FlowFixMe The Flow type is opaque but there's no way to actually create it.
+  // $FlowFixMe[incompatible-return] The Flow type is opaque but there's no way to actually create it.
   return createPortalImpl(children, container, null, key);
 }
 

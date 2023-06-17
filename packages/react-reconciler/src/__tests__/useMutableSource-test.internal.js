@@ -240,6 +240,7 @@ describe('useMutableSource', () => {
           () => Scheduler.log('Sync effect'),
         );
       });
+
       // Do enough work to read from one component
       await waitFor(['a:one']);
 
@@ -721,6 +722,7 @@ describe('useMutableSource', () => {
           () => Scheduler.log('Sync effect'),
         );
       });
+
       await waitFor(['a:a:one', 'b:b:one']);
 
       // Mutating the source should trigger a tear detection on the next read,
@@ -824,6 +826,7 @@ describe('useMutableSource', () => {
           </>,
         );
       });
+
       await waitFor(['a:one']);
 
       // Mutate source
@@ -1610,19 +1613,41 @@ describe('useMutableSource', () => {
         source.valueB = '3';
       });
 
-      // In default sync mode, all of the updates flush sync.
-      await waitFor([
-        // The partial render completes
-        'Child: 2',
-        'Commit: 2, 2',
-        'Parent: 3',
-        'Child: 3',
-      ]);
+      if (gate(flags => flags.forceConcurrentByDefaultForTesting)) {
+        await waitFor([
+          // The partial render completes
+          'Child: 2',
+          'Commit: 2, 2',
+        ]);
 
-      await waitForAll([
-        // Now finish the rest of the update
-        'Commit: 3, 3',
-      ]);
+        // Now there are two pending mutations at different priorities. But they
+        // both read the same version of the mutable source, so we must render
+        // them simultaneously.
+        //
+        await waitFor([
+          'Parent: 3',
+          // Demonstrates that we can yield here
+        ]);
+        await waitFor([
+          // Now finish the rest of the update
+          'Child: 3',
+          'Commit: 3, 3',
+        ]);
+      } else {
+        // In default sync mode, all of the updates flush sync.
+        await waitFor([
+          // The partial render completes
+          'Child: 2',
+          'Commit: 2, 2',
+          'Parent: 3',
+          'Child: 3',
+        ]);
+
+        await waitForAll([
+          // Now finish the rest of the update
+          'Commit: 3, 3',
+        ]);
+      }
     });
   });
 
@@ -1756,6 +1781,7 @@ describe('useMutableSource', () => {
               </>,
             );
           });
+
           await waitFor(['a:one']);
 
           const PrevScheduler = Scheduler;
@@ -1818,6 +1844,7 @@ describe('useMutableSource', () => {
               </>,
             );
           });
+
           await waitFor(['a:one']);
 
           const PrevScheduler = Scheduler;

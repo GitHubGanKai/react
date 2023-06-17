@@ -12,7 +12,8 @@ export {
   preload,
   preconnect,
   prefetchDNS,
-} from 'react-dom-bindings/src/shared/ReactDOMFloat';
+} from '../shared/ReactDOMFloat';
+export {useFormStatus as experimental_useFormStatus} from 'react-dom-bindings/src/shared/ReactDOMFormActions';
 
 export function createPortal() {
   throw new Error(

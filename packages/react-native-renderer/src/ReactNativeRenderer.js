@@ -77,7 +77,6 @@ function render(
   }
   updateContainer(element, root, null, callback);
 
-  // $FlowFixMe Flow has hardcoded values for React DOM that don't work with RN
   return getPublicRootInstance(root);
 }
 
@@ -146,6 +145,7 @@ injectIntoDevTools({
   version: ReactVersion,
   rendererPackageName: 'react-native-renderer',
   rendererConfig: {
+    getInspectorDataForInstance,
     getInspectorDataForViewTag: getInspectorDataForViewTag,
     getInspectorDataForViewAtPoint: getInspectorDataForViewAtPoint.bind(
       null,

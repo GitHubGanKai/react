@@ -13,25 +13,36 @@ import type {LazyComponent} from 'react/src/ReactLazy';
 import type {
   ClientReference,
   ClientReferenceMetadata,
-  UninitializedModel,
-  Response,
   SSRManifest,
-} from './ReactFlightClientHostConfig';
+  StringDecoder,
+} from './ReactFlightClientConfig';
+
+import type {HintModel} from 'react-server/src/ReactFlightServerConfig';
+
+import type {CallServerCallback} from './ReactFlightReplyClient';
 
 import {
   resolveClientReference,
   preloadModule,
   requireModule,
-  parseModel,
-} from './ReactFlightClientHostConfig';
+  dispatchHint,
+  readPartialStringChunk,
+  readFinalStringChunk,
+  createStringDecoder,
+} from './ReactFlightClientConfig';
 
-import {knownServerReferences} from './ReactFlightServerReferenceRegistry';
+import {
+  encodeFormAction,
+  knownServerReferences,
+} from './ReactFlightReplyClient';
 
 import {REACT_LAZY_TYPE, REACT_ELEMENT_TYPE} from 'shared/ReactSymbols';
 
 import {getOrCreateServerContext} from 'shared/ReactServerContextRegistry';
 
-export type CallServerCallback = <A, T>(id: any, args: A) => Promise<T>;
+export type {CallServerCallback};
+
+type UninitializedModel = string;
 
 export type JSONValue =
   | number
@@ -40,6 +51,14 @@ export type JSONValue =
   | string
   | {+[key: string]: JSONValue}
   | $ReadOnlyArray<JSONValue>;
+
+const ROW_ID = 0;
+const ROW_TAG = 1;
+const ROW_LENGTH = 2;
+const ROW_CHUNK_BY_NEWLINE = 3;
+const ROW_CHUNK_BY_LENGTH = 4;
+
+type RowParserState = 0 | 1 | 2 | 3 | 4;
 
 const PENDING = 'pending';
 const BLOCKED = 'blocked';
@@ -150,14 +169,18 @@ Chunk.prototype.then = function <T>(
   }
 };
 
-export type ResponseBase = {
+export type Response = {
   _bundlerConfig: SSRManifest,
   _callServer: CallServerCallback,
   _chunks: Map<number, SomeChunk<any>>,
-  ...
+  _fromJSON: (key: string, value: JSONValue) => any,
+  _stringDecoder: StringDecoder,
+  _rowState: RowParserState,
+  _rowID: number, // parts of a row ID parsed so far
+  _rowTag: number, // 0 indicates that we're currently parsing the row ID
+  _rowLength: number, // remaining bytes in the row. 0 indicates that we're looking for a newline.
+  _buffer: Array<Uint8Array>, // chunks received so far as part of this row
 };
-
-export type {Response};
 
 function readChunk<T>(chunk: SomeChunk<T>): T {
   // If we have resolved content, we try to initialize it first which
@@ -189,12 +212,12 @@ export function getRoot<T>(response: Response): Thenable<T> {
 }
 
 function createPendingChunk<T>(response: Response): PendingChunk<T> {
-  // $FlowFixMe Flow doesn't support functions as constructors
+  // $FlowFixMe[invalid-constructor] Flow doesn't support functions as constructors
   return new Chunk(PENDING, null, null, response);
 }
 
 function createBlockedChunk<T>(response: Response): BlockedChunk<T> {
-  // $FlowFixMe Flow doesn't support functions as constructors
+  // $FlowFixMe[invalid-constructor] Flow doesn't support functions as constructors
   return new Chunk(BLOCKED, null, null, response);
 }
 
@@ -202,7 +225,7 @@ function createErrorChunk<T>(
   response: Response,
   error: ErrorWithDigest,
 ): ErroredChunk<T> {
-  // $FlowFixMe Flow doesn't support functions as constructors
+  // $FlowFixMe[invalid-constructor] Flow doesn't support functions as constructors
   return new Chunk(ERRORED, null, error, response);
 }
 
@@ -253,7 +276,7 @@ function createResolvedModelChunk<T>(
   response: Response,
   value: UninitializedModel,
 ): ResolvedModelChunk<T> {
-  // $FlowFixMe Flow doesn't support functions as constructors
+  // $FlowFixMe[invalid-constructor] Flow doesn't support functions as constructors
   return new Chunk(RESOLVED_MODEL, value, null, response);
 }
 
@@ -261,8 +284,16 @@ function createResolvedModuleChunk<T>(
   response: Response,
   value: ClientReference<T>,
 ): ResolvedModuleChunk<T> {
-  // $FlowFixMe Flow doesn't support functions as constructors
+  // $FlowFixMe[invalid-constructor] Flow doesn't support functions as constructors
   return new Chunk(RESOLVED_MODULE, value, null, response);
+}
+
+function createInitializedTextChunk(
+  response: Response,
+  value: string,
+): InitializedChunk<string> {
+  // $FlowFixMe[invalid-constructor] Flow doesn't support functions as constructors
+  return new Chunk(INITIALIZED, value, null, response);
 }
 
 function resolveModelChunk<T>(
@@ -497,11 +528,14 @@ function createServerReferenceProxy<A: Iterable<any>, T>(
       return callServer(metaData.id, bound.concat(args));
     });
   };
+  // Expose encoder for use by SSR.
+  // TODO: Only expose this in SSR builds and not the browser client.
+  proxy.$$FORM_ACTION = encodeFormAction;
   knownServerReferences.set(proxy, metaData);
   return proxy;
 }
 
-export function parseModelString(
+function parseModelString(
   response: Response,
   parentObject: Object,
   key: string,
@@ -515,11 +549,11 @@ export function parseModelString(
     switch (value[1]) {
       case '$': {
         // This was an escaped string value.
-        return value.substring(1);
+        return value.slice(1);
       }
       case 'L': {
         // Lazy node
-        const id = parseInt(value.substring(2), 16);
+        const id = parseInt(value.slice(2), 16);
         const chunk = getChunk(response, id);
         // We create a React.lazy wrapper around any lazy values.
         // When passed into React, we'll know how to suspend on this.
@@ -527,21 +561,21 @@ export function parseModelString(
       }
       case '@': {
         // Promise
-        const id = parseInt(value.substring(2), 16);
+        const id = parseInt(value.slice(2), 16);
         const chunk = getChunk(response, id);
         return chunk;
       }
       case 'S': {
         // Symbol
-        return Symbol.for(value.substring(2));
+        return Symbol.for(value.slice(2));
       }
       case 'P': {
         // Server Context Provider
-        return getOrCreateServerContext(value.substring(2)).Provider;
+        return getOrCreateServerContext(value.slice(2)).Provider;
       }
       case 'F': {
         // Server Reference
-        const id = parseInt(value.substring(2), 16);
+        const id = parseInt(value.slice(2), 16);
         const chunk = getChunk(response, id);
         switch (chunk.status) {
           case RESOLVED_MODEL:
@@ -559,14 +593,38 @@ export function parseModelString(
             throw chunk.reason;
         }
       }
+      case 'I': {
+        // $Infinity
+        return Infinity;
+      }
+      case '-': {
+        // $-0 or $-Infinity
+        if (value === '$-0') {
+          return -0;
+        } else {
+          return -Infinity;
+        }
+      }
+      case 'N': {
+        // $NaN
+        return NaN;
+      }
       case 'u': {
         // matches "$undefined"
         // Special encoding for `undefined` which can't be serialized as JSON otherwise.
         return undefined;
       }
+      case 'D': {
+        // Date
+        return new Date(Date.parse(value.slice(2)));
+      }
+      case 'n': {
+        // BigInt
+        return BigInt(value.slice(2));
+      }
       default: {
         // We assume that anything else is a reference ID.
-        const id = parseInt(value.substring(1), 16);
+        const id = parseInt(value.slice(1), 16);
         const chunk = getChunk(response, id);
         switch (chunk.status) {
           case RESOLVED_MODEL:
@@ -597,7 +655,7 @@ export function parseModelString(
   return value;
 }
 
-export function parseModelTuple(
+function parseModelTuple(
   response: Response,
   value: {+[key: string]: JSONValue} | $ReadOnlyArray<JSONValue>,
 ): any {
@@ -621,17 +679,26 @@ function missingCall() {
 export function createResponse(
   bundlerConfig: SSRManifest,
   callServer: void | CallServerCallback,
-): ResponseBase {
+): Response {
   const chunks: Map<number, SomeChunk<any>> = new Map();
-  const response = {
+  const response: Response = {
     _bundlerConfig: bundlerConfig,
     _callServer: callServer !== undefined ? callServer : missingCall,
     _chunks: chunks,
+    _stringDecoder: createStringDecoder(),
+    _fromJSON: (null: any),
+    _rowState: 0,
+    _rowID: 0,
+    _rowTag: 0,
+    _rowLength: 0,
+    _buffer: [],
   };
+  // Don't inline this call because it causes closure to outline the call above.
+  response._fromJSON = createFromJSONCallback(response);
   return response;
 }
 
-export function resolveModel(
+function resolveModel(
   response: Response,
   id: number,
   model: UninitializedModel,
@@ -645,7 +712,14 @@ export function resolveModel(
   }
 }
 
-export function resolveModule(
+function resolveText(response: Response, id: number, text: string): void {
+  const chunks = response._chunks;
+  // We assume that we always reference large strings after they've been
+  // emitted.
+  chunks.set(id, createInitializedTextChunk(response, text));
+}
+
+function resolveModule(
   response: Response,
   id: number,
   model: UninitializedModel,
@@ -694,7 +768,7 @@ export function resolveModule(
 }
 
 type ErrorWithDigest = Error & {digest?: string};
-export function resolveErrorProd(
+function resolveErrorProd(
   response: Response,
   id: number,
   digest: string,
@@ -723,7 +797,7 @@ export function resolveErrorProd(
   }
 }
 
-export function resolveErrorDev(
+function resolveErrorDev(
   response: Response,
   id: number,
   digest: string,
@@ -752,6 +826,188 @@ export function resolveErrorDev(
   } else {
     triggerErrorOnChunk(chunk, errorWithDigest);
   }
+}
+
+function resolveHint(
+  response: Response,
+  code: string,
+  model: UninitializedModel,
+): void {
+  const hintModel: HintModel = parseModel(response, model);
+  dispatchHint(code, hintModel);
+}
+
+function processFullRow(
+  response: Response,
+  id: number,
+  tag: number,
+  buffer: Array<Uint8Array>,
+  lastChunk: string | Uint8Array,
+): void {
+  let row = '';
+  const stringDecoder = response._stringDecoder;
+  for (let i = 0; i < buffer.length; i++) {
+    const chunk = buffer[i];
+    row += readPartialStringChunk(stringDecoder, chunk);
+  }
+  if (typeof lastChunk === 'string') {
+    row += lastChunk;
+  } else {
+    row += readFinalStringChunk(stringDecoder, lastChunk);
+  }
+  switch (tag) {
+    case 73 /* "I" */: {
+      resolveModule(response, id, row);
+      return;
+    }
+    case 72 /* "H" */: {
+      const code = row[0];
+      resolveHint(response, code, row.slice(1));
+      return;
+    }
+    case 69 /* "E" */: {
+      const errorInfo = JSON.parse(row);
+      if (__DEV__) {
+        resolveErrorDev(
+          response,
+          id,
+          errorInfo.digest,
+          errorInfo.message,
+          errorInfo.stack,
+        );
+      } else {
+        resolveErrorProd(response, id, errorInfo.digest);
+      }
+      return;
+    }
+    case 84 /* "T" */: {
+      resolveText(response, id, row);
+      return;
+    }
+    default: {
+      // We assume anything else is JSON.
+      resolveModel(response, id, row);
+      return;
+    }
+  }
+}
+
+export function processBinaryChunk(
+  response: Response,
+  chunk: Uint8Array,
+): void {
+  let i = 0;
+  let rowState = response._rowState;
+  let rowID = response._rowID;
+  let rowTag = response._rowTag;
+  let rowLength = response._rowLength;
+  const buffer = response._buffer;
+  const chunkLength = chunk.length;
+  while (i < chunkLength) {
+    let lastIdx = -1;
+    switch (rowState) {
+      case ROW_ID: {
+        const byte = chunk[i++];
+        if (byte === 58 /* ":" */) {
+          // Finished the rowID, next we'll parse the tag.
+          rowState = ROW_TAG;
+        } else {
+          rowID = (rowID << 4) | (byte > 96 ? byte - 87 : byte - 48);
+        }
+        continue;
+      }
+      case ROW_TAG: {
+        const resolvedRowTag = chunk[i];
+        if (resolvedRowTag === 84 /* "T" */) {
+          rowTag = resolvedRowTag;
+          rowState = ROW_LENGTH;
+          i++;
+        } else if (resolvedRowTag > 64 && resolvedRowTag < 91 /* "A"-"Z" */) {
+          rowTag = resolvedRowTag;
+          rowState = ROW_CHUNK_BY_NEWLINE;
+          i++;
+        } else {
+          rowTag = 0;
+          rowState = ROW_CHUNK_BY_NEWLINE;
+          // This was an unknown tag so it was probably part of the data.
+        }
+        continue;
+      }
+      case ROW_LENGTH: {
+        const byte = chunk[i++];
+        if (byte === 44 /* "," */) {
+          // Finished the rowLength, next we'll buffer up to that length.
+          rowState = ROW_CHUNK_BY_LENGTH;
+        } else {
+          rowLength = (rowLength << 4) | (byte > 96 ? byte - 87 : byte - 48);
+        }
+        continue;
+      }
+      case ROW_CHUNK_BY_NEWLINE: {
+        // We're looking for a newline
+        lastIdx = chunk.indexOf(10 /* "\n" */, i);
+        break;
+      }
+      case ROW_CHUNK_BY_LENGTH: {
+        // We're looking for the remaining byte length
+        lastIdx = i + rowLength;
+        if (lastIdx > chunk.length) {
+          lastIdx = -1;
+        }
+        break;
+      }
+    }
+    const offset = chunk.byteOffset + i;
+    if (lastIdx > -1) {
+      // We found the last chunk of the row
+      const length = lastIdx - i;
+      const lastChunk = new Uint8Array(chunk.buffer, offset, length);
+      processFullRow(response, rowID, rowTag, buffer, lastChunk);
+      // Reset state machine for a new row
+      i = lastIdx;
+      if (rowState === ROW_CHUNK_BY_NEWLINE) {
+        // If we're trailing by a newline we need to skip it.
+        i++;
+      }
+      rowState = ROW_ID;
+      rowTag = 0;
+      rowID = 0;
+      rowLength = 0;
+      buffer.length = 0;
+    } else {
+      // The rest of this row is in a future chunk. We stash the rest of the
+      // current chunk until we can process the full row.
+      const length = chunk.byteLength - i;
+      const remainingSlice = new Uint8Array(chunk.buffer, offset, length);
+      buffer.push(remainingSlice);
+      // Update how many bytes we're still waiting for. If we're looking for
+      // a newline, this doesn't hurt since we'll just ignore it.
+      rowLength -= remainingSlice.byteLength;
+      break;
+    }
+  }
+  response._rowState = rowState;
+  response._rowID = rowID;
+  response._rowTag = rowTag;
+  response._rowLength = rowLength;
+}
+
+function parseModel<T>(response: Response, json: UninitializedModel): T {
+  return JSON.parse(json, response._fromJSON);
+}
+
+function createFromJSONCallback(response: Response) {
+  // $FlowFixMe[missing-this-annot]
+  return function (key: string, value: JSONValue) {
+    if (typeof value === 'string') {
+      // We can't use .bind here because we need the "this" value.
+      return parseModelString(response, this, key, value);
+    }
+    if (typeof value === 'object' && value !== null) {
+      return parseModelTuple(response, value);
+    }
+    return value;
+  };
 }
 
 export function close(response: Response): void {

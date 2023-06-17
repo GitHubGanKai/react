@@ -184,7 +184,6 @@ describe('ReactUse', () => {
     expect(root).toMatchRenderedOutput('Loading...');
   });
 
-  // @gate enableUseHook
   test('basic use(promise)', async () => {
     const promiseA = Promise.resolve('A');
     const promiseB = Promise.resolve('B');
@@ -213,7 +212,6 @@ describe('ReactUse', () => {
     expect(root).toMatchRenderedOutput('ABC');
   });
 
-  // @gate enableUseHook
   test("using a promise that's not cached between attempts", async () => {
     function Async() {
       const text =
@@ -241,7 +239,6 @@ describe('ReactUse', () => {
     expect(root).toMatchRenderedOutput('ABC');
   });
 
-  // @gate enableUseHook
   test('using a rejected promise will throw', async () => {
     class ErrorBoundary extends React.Component {
       state = {error: null};
@@ -286,7 +283,6 @@ describe('ReactUse', () => {
     assertLog(['Oops!', 'Oops!']);
   });
 
-  // @gate enableUseHook
   test('use(promise) in multiple components', async () => {
     // This tests that the state for tracking promises is reset per component.
     const promiseA = Promise.resolve('A');
@@ -320,7 +316,6 @@ describe('ReactUse', () => {
     expect(root).toMatchRenderedOutput('ABCD');
   });
 
-  // @gate enableUseHook
   test('use(promise) in multiple sibling components', async () => {
     // This tests that the state for tracking promises is reset per component.
 
@@ -352,11 +347,10 @@ describe('ReactUse', () => {
         root.render(<App />);
       });
     });
-    assertLog(['CD', 'Loading...']);
+    assertLog(['Loading...']);
     expect(root).toMatchRenderedOutput('Loading...');
   });
 
-  // @gate enableUseHook
   test('erroring in the same component as an uncached promise does not result in an infinite loop', async () => {
     class ErrorBoundary extends React.Component {
       state = {error: null};
@@ -434,7 +428,6 @@ describe('ReactUse', () => {
     expect(root).toMatchRenderedOutput('Caught an error: Oops!');
   });
 
-  // @gate enableUseHook
   test('basic use(context)', async () => {
     const ContextA = React.createContext('');
     const ContextB = React.createContext('B');
@@ -458,7 +451,6 @@ describe('ReactUse', () => {
     expect(root).toMatchRenderedOutput('AB');
   });
 
-  // @gate enableUseHook
   test('interrupting while yielded should reset contexts', async () => {
     let resolve;
     const promise = new Promise(r => {
@@ -505,7 +497,6 @@ describe('ReactUse', () => {
     expect(root).toMatchRenderedOutput(<div>Hello world!</div>);
   });
 
-  // @gate enableUseHook || !__DEV__
   test('warns if use(promise) is wrapped with try/catch block', async () => {
     function Async() {
       try {
@@ -541,7 +532,6 @@ describe('ReactUse', () => {
     }
   });
 
-  // @gate enableUseHook
   test('during a transition, can unwrap async operations even if nothing is cached', async () => {
     function App() {
       return <Text text={use(getAsyncText('Async'))} />;
@@ -577,7 +567,6 @@ describe('ReactUse', () => {
     expect(root).toMatchRenderedOutput('Async');
   });
 
-  // @gate enableUseHook
   test("does not prevent a Suspense fallback from showing if it's a new boundary, even during a transition", async () => {
     function App() {
       return <Text text={use(getAsyncText('Async'))} />;
@@ -620,7 +609,6 @@ describe('ReactUse', () => {
     expect(root).toMatchRenderedOutput('Async');
   });
 
-  // @gate enableUseHook
   test('when waiting for data to resolve, a fresh update will trigger a restart', async () => {
     function App() {
       return <Text text={use(getAsyncText('Will never resolve'))} />;
@@ -652,7 +640,6 @@ describe('ReactUse', () => {
     assertLog(['Something different']);
   });
 
-  // @gate enableUseHook
   test('when waiting for data to resolve, an update on a different root does not cause work to be dropped', async () => {
     const getCachedAsyncText = cache(getAsyncText);
 
@@ -693,7 +680,6 @@ describe('ReactUse', () => {
     expect(root1).toMatchRenderedOutput('Hi');
   });
 
-  // @gate enableUseHook
   test('while suspended, hooks cannot be called (i.e. current dispatcher is unset correctly)', async () => {
     function App() {
       return <Text text={use(getAsyncText('Will never resolve'))} />;
@@ -722,7 +708,6 @@ describe('ReactUse', () => {
     );
   });
 
-  // @gate enableUseHook
   test('unwraps thenable that fulfills synchronously without suspending', async () => {
     function App() {
       const thenable = {
@@ -750,7 +735,6 @@ describe('ReactUse', () => {
     expect(root).toMatchRenderedOutput('Hi');
   });
 
-  // @gate enableUseHook
   test('does not suspend indefinitely if an interleaved update was skipped', async () => {
     function Child({childShouldSuspend}) {
       return (
@@ -979,7 +963,6 @@ describe('ReactUse', () => {
     expect(root).toMatchRenderedOutput('aguacate avocat');
   });
 
-  // @gate enableUseHook
   test(
     'wrap an async function with useMemo to skip running the function ' +
       'twice when loading new data',
@@ -1012,7 +995,6 @@ describe('ReactUse', () => {
     },
   );
 
-  // @gate enableUseHook
   test('load multiple nested Suspense boundaries', async () => {
     const getCachedAsyncText = cache(getAsyncText);
 
@@ -1034,26 +1016,19 @@ describe('ReactUse', () => {
         </Suspense>,
       );
     });
-    assertLog([
-      'Async text requested [A]',
-      'Async text requested [B]',
-      'Async text requested [C]',
-      '(Loading C...)',
-      '(Loading B...)',
-      '(Loading A...)',
-    ]);
+    assertLog(['Async text requested [A]', '(Loading A...)']);
     expect(root).toMatchRenderedOutput('(Loading A...)');
 
     await act(() => {
       resolveTextRequests('A');
     });
-    assertLog(['A', '(Loading C...)', '(Loading B...)']);
+    assertLog(['A', 'Async text requested [B]', '(Loading B...)']);
     expect(root).toMatchRenderedOutput('A(Loading B...)');
 
     await act(() => {
       resolveTextRequests('B');
     });
-    assertLog(['B', '(Loading C...)']);
+    assertLog(['B', 'Async text requested [C]', '(Loading C...)']);
     expect(root).toMatchRenderedOutput('AB(Loading C...)');
 
     await act(() => {
@@ -1063,7 +1038,6 @@ describe('ReactUse', () => {
     expect(root).toMatchRenderedOutput('ABC');
   });
 
-  // @gate enableUseHook
   test('load multiple nested Suspense boundaries (uncached requests)', async () => {
     // This the same as the previous test, except the requests are not cached.
     // The tree should still eventually resolve, despite the
@@ -1087,14 +1061,7 @@ describe('ReactUse', () => {
         </Suspense>,
       );
     });
-    assertLog([
-      'Async text requested [A]',
-      'Async text requested [B]',
-      'Async text requested [C]',
-      '(Loading C...)',
-      '(Loading B...)',
-      '(Loading A...)',
-    ]);
+    assertLog(['Async text requested [A]', '(Loading A...)']);
     expect(root).toMatchRenderedOutput('(Loading A...)');
 
     await act(() => {
@@ -1116,8 +1083,6 @@ describe('ReactUse', () => {
       // React does not suspend on the inner requests, because that would
       // block A from appearing. Instead it shows a fallback.
       'Async text requested [B]',
-      'Async text requested [C]',
-      '(Loading C...)',
       '(Loading B...)',
     ]);
     expect(root).toMatchRenderedOutput('A(Loading B...)');
@@ -1155,7 +1120,6 @@ describe('ReactUse', () => {
     expect(root).toMatchRenderedOutput('ABC');
   });
 
-  // @gate enableUseHook
   test('use() combined with render phase updates', async () => {
     function Async() {
       const a = use(Promise.resolve('A'));
@@ -1487,5 +1451,169 @@ describe('ReactUse', () => {
     });
     assertLog(['Hi']);
     expect(root).toMatchRenderedOutput('Hi');
+  });
+
+  test('unwrap uncached promises inside forwardRef', async () => {
+    const asyncInstance = {};
+    const Async = React.forwardRef((props, ref) => {
+      React.useImperativeHandle(ref, () => asyncInstance);
+      const text = use(Promise.resolve('Async'));
+      return <Text text={text} />;
+    });
+
+    const ref = React.createRef();
+    function App() {
+      return (
+        <Suspense fallback={<Text text="Loading..." />}>
+          <Async ref={ref} />
+        </Suspense>
+      );
+    }
+
+    const root = ReactNoop.createRoot();
+    await act(() => {
+      startTransition(() => {
+        root.render(<App />);
+      });
+    });
+    assertLog(['Async']);
+    expect(root).toMatchRenderedOutput('Async');
+    expect(ref.current).toBe(asyncInstance);
+  });
+
+  test('unwrap uncached promises inside memo', async () => {
+    const Async = React.memo(
+      props => {
+        const text = use(Promise.resolve(props.text));
+        return <Text text={text} />;
+      },
+      (a, b) => a.text === b.text,
+    );
+
+    function App({text}) {
+      return (
+        <Suspense fallback={<Text text="Loading..." />}>
+          <Async text={text} />
+        </Suspense>
+      );
+    }
+
+    const root = ReactNoop.createRoot();
+    await act(() => {
+      startTransition(() => {
+        root.render(<App text="Async" />);
+      });
+    });
+    assertLog(['Async']);
+    expect(root).toMatchRenderedOutput('Async');
+
+    // Update to the same value
+    await act(() => {
+      startTransition(() => {
+        root.render(<App text="Async" />);
+      });
+    });
+    // Should not have re-rendered, because it's memoized
+    assertLog([]);
+    expect(root).toMatchRenderedOutput('Async');
+
+    // Update to a different value
+    await act(() => {
+      startTransition(() => {
+        root.render(<App text="Async!" />);
+      });
+    });
+    assertLog(['Async!']);
+    expect(root).toMatchRenderedOutput('Async!');
+  });
+
+  // @gate !disableLegacyContext
+  test('unwrap uncached promises in component that accesses legacy context', async () => {
+    class ContextProvider extends React.Component {
+      static childContextTypes = {
+        legacyContext() {},
+      };
+      getChildContext() {
+        return {legacyContext: 'Async'};
+      }
+      render() {
+        return this.props.children;
+      }
+    }
+
+    function Async({label}, context) {
+      const text = use(Promise.resolve(context.legacyContext + ` (${label})`));
+      return <Text text={text} />;
+    }
+    Async.contextTypes = {
+      legacyContext: () => {},
+    };
+
+    const AsyncMemo = React.memo(Async, (a, b) => a.label === b.label);
+
+    function App() {
+      return (
+        <ContextProvider>
+          <Suspense fallback={<Text text="Loading..." />}>
+            <div>
+              <Async label="function component" />
+            </div>
+            <div>
+              <AsyncMemo label="memo component" />
+            </div>
+          </Suspense>
+        </ContextProvider>
+      );
+    }
+
+    const root = ReactNoop.createRoot();
+    await act(() => {
+      startTransition(() => {
+        root.render(<App />);
+      });
+    });
+    assertLog(['Async (function component)', 'Async (memo component)']);
+    expect(root).toMatchRenderedOutput(
+      <>
+        <div>Async (function component)</div>
+        <div>Async (memo component)</div>
+      </>,
+    );
+  });
+
+  test('regression test: updates while component is suspended should not be mistaken for render phase updates', async () => {
+    const getCachedAsyncText = cache(getAsyncText);
+
+    let setState;
+    function App() {
+      const [state, _setState] = useState('A');
+      setState = _setState;
+      return <Text text={use(getCachedAsyncText(state))} />;
+    }
+
+    // Initial render
+    const root = ReactNoop.createRoot();
+    await act(() => root.render(<App />));
+    assertLog(['Async text requested [A]']);
+    expect(root).toMatchRenderedOutput(null);
+    await act(() => resolveTextRequests('A'));
+    assertLog(['A']);
+    expect(root).toMatchRenderedOutput('A');
+
+    // Update to B. This will suspend.
+    await act(() => startTransition(() => setState('B')));
+    assertLog(['Async text requested [B]']);
+    expect(root).toMatchRenderedOutput('A');
+
+    // While B is suspended, update to C. This should immediately interrupt
+    // the render for B. In the regression, this update was mistakenly treated
+    // as a render phase update.
+    ReactNoop.flushSync(() => setState('C'));
+    assertLog(['Async text requested [C]']);
+
+    // Finish rendering.
+    await act(() => resolveTextRequests('C'));
+    assertLog(['C']);
+    expect(root).toMatchRenderedOutput('C');
   });
 });

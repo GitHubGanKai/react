@@ -43,7 +43,6 @@ describe('ReactErrorBoundaries', () => {
     PropTypes = require('prop-types');
     ReactFeatureFlags = require('shared/ReactFeatureFlags');
     ReactFeatureFlags.replayFailedUnitOfWorkWithInvokeGuardedCallback = false;
-    ReactFeatureFlags.skipUnmountedBoundaries = true;
     ReactDOM = require('react-dom');
     React = require('react');
     act = require('internal-test-utils').act;
@@ -1000,10 +999,7 @@ describe('ReactErrorBoundaries', () => {
       'BrokenRender constructor',
       'BrokenRender componentWillMount',
       'BrokenRender render [!]',
-      // Render third child, even though an earlier sibling threw.
-      'Normal constructor',
-      'Normal componentWillMount',
-      'Normal render',
+      // Skip the remaining siblings
       // Handle the error
       'ErrorBoundary static getDerivedStateFromError',
       'ErrorBoundary componentWillMount',

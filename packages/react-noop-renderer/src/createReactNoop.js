@@ -78,6 +78,8 @@ type SuspenseyCommitSubscription = {
   commit: null | (() => void),
 };
 
+export type TransitionStatus = mixed;
+
 const NO_CONTEXT = {};
 const UPPERCASE_CONTEXT = {};
 const UPDATE_SIGNAL = {};
@@ -88,7 +90,6 @@ if (__DEV__) {
 
 function createReactNoop(reconciler: Function, useMutation: boolean) {
   let instanceCounter = 0;
-  let hostDiffCounter = 0;
   let hostUpdateCounter = 0;
   let hostCloneCounter = 0;
 
@@ -312,7 +313,9 @@ function createReactNoop(reconciler: Function, useMutation: boolean) {
       if (record === undefined) {
         throw new Error('Could not find record for key.');
       }
-      if (record.status === 'pending') {
+      if (record.status === 'fulfilled') {
+        // Already loaded.
+      } else if (record.status === 'pending') {
         if (suspenseyCommitSubscription === null) {
           suspenseyCommitSubscription = {
             pendingCount: 1,
@@ -321,20 +324,19 @@ function createReactNoop(reconciler: Function, useMutation: boolean) {
         } else {
           suspenseyCommitSubscription.pendingCount++;
         }
+        // Stash the subscription on the record. In `resolveSuspenseyThing`,
+        // we'll use this fire the commit once all the things have loaded.
+        if (record.subscriptions === null) {
+          record.subscriptions = [];
+        }
+        record.subscriptions.push(suspenseyCommitSubscription);
       }
-      // Stash the subscription on the record. In `resolveSuspenseyThing`,
-      // we'll use this fire the commit once all the things have loaded.
-      if (record.subscriptions === null) {
-        record.subscriptions = [];
-      }
-      record.subscriptions.push(suspenseyCommitSubscription);
     } else {
       throw new Error(
         'Did not expect this host component to be visited when suspending ' +
           'the commit. Did you check the SuspendCommit flag?',
       );
     }
-    return suspenseyCommitSubscription;
   }
 
   function waitForCommitToBeReady():
@@ -457,16 +459,12 @@ function createReactNoop(reconciler: Function, useMutation: boolean) {
       oldProps: Props,
       newProps: Props,
     ): null | {...} {
-      if (type === 'errorInCompletePhase') {
-        throw new Error('Error in host config.');
-      }
       if (oldProps === null) {
         throw new Error('Should have old props');
       }
       if (newProps === null) {
         throw new Error('Should have new props');
       }
-      hostDiffCounter++;
       return UPDATE_SIGNAL;
     },
 
@@ -530,6 +528,10 @@ function createReactNoop(reconciler: Function, useMutation: boolean) {
       return currentEventPriority;
     },
 
+    shouldAttemptEagerTransition(): boolean {
+      return false;
+    },
+
     now: Scheduler.unstable_now,
 
     isPrimaryRenderer: true,
@@ -569,46 +571,68 @@ function createReactNoop(reconciler: Function, useMutation: boolean) {
       callback(endTime);
     },
 
-    shouldSuspendCommit(type: string, props: Props): boolean {
-      if (type === 'suspensey-thing' && typeof props.src === 'string') {
-        if (suspenseyThingCache === null) {
-          suspenseyThingCache = new Map();
-        }
-        const record = suspenseyThingCache.get(props.src);
-        if (record === undefined) {
-          const newRecord: SuspenseyThingRecord = {
-            status: 'pending',
-            subscriptions: null,
-          };
-          suspenseyThingCache.set(props.src, newRecord);
-          const onLoadStart = props.onLoadStart;
-          if (typeof onLoadStart === 'function') {
-            onLoadStart();
-          }
-          return props.src;
-        } else {
-          if (record.status === 'pending') {
-            // The resource was already requested, but it hasn't finished
-            // loading yet.
-            return true;
-          } else {
-            // The resource has already loaded. If the renderer is confident that
-            // the resource will still be cached by the time the render commits,
-            // then it can return false, like we do here.
-            return false;
-          }
-        }
+    maySuspendCommit(type: string, props: Props): boolean {
+      // Asks whether it's possible for this combination of type and props
+      // to ever need to suspend. This is different from asking whether it's
+      // currently ready because even if it's ready now, it might get purged
+      // from the cache later.
+      return type === 'suspensey-thing' && typeof props.src === 'string';
+    },
+
+    mayResourceSuspendCommit(resource: mixed): boolean {
+      throw new Error(
+        'Resources are not implemented for React Noop yet. This method should not be called',
+      );
+    },
+
+    preloadInstance(type: string, props: Props): boolean {
+      if (type !== 'suspensey-thing' || typeof props.src !== 'string') {
+        throw new Error('Attempted to preload unexpected instance: ' + type);
       }
-      // Don't need to suspend.
-      return false;
+
+      // In addition to preloading an instance, this method asks whether the
+      // instance is ready to be committed. If it's not, React may yield to the
+      // main thread and ask again. It's possible a load event will fire in
+      // between, in which case we can avoid showing a fallback.
+      if (suspenseyThingCache === null) {
+        suspenseyThingCache = new Map();
+      }
+      const record = suspenseyThingCache.get(props.src);
+      if (record === undefined) {
+        const newRecord: SuspenseyThingRecord = {
+          status: 'pending',
+          subscriptions: null,
+        };
+        suspenseyThingCache.set(props.src, newRecord);
+        const onLoadStart = props.onLoadStart;
+        if (typeof onLoadStart === 'function') {
+          onLoadStart();
+        }
+        return false;
+      } else {
+        // If this is false, React will trigger a fallback, if needed.
+        return record.status === 'fulfilled';
+      }
+    },
+
+    preloadResource(resource: mixed): boolean {
+      throw new Error(
+        'Resources are not implemented for React Noop yet. This method should not be called',
+      );
     },
 
     startSuspendingCommit,
     suspendInstance,
+
+    suspendResource(resource: mixed): void {
+      throw new Error(
+        'Resources are not implemented for React Noop yet. This method should not be called',
+      );
+    },
+
     waitForCommitToBeReady,
 
-    prepareRendererToRender() {},
-    resetRendererAfterRender() {},
+    NotPendingTransition: (null: TransitionStatus),
   };
 
   const hostConfig = useMutation
@@ -806,7 +830,6 @@ function createReactNoop(reconciler: Function, useMutation: boolean) {
       if (child.length === 1) {
         return childToJSX(child[0], null);
       }
-      // $FlowFixMe
       const children = child.map(c => childToJSX(c, null));
       if (children.every(c => typeof c === 'string' || typeof c === 'number')) {
         return children.join('');
@@ -1163,30 +1186,24 @@ function createReactNoop(reconciler: Function, useMutation: boolean) {
     },
 
     startTrackingHostCounters(): void {
-      hostDiffCounter = 0;
       hostUpdateCounter = 0;
       hostCloneCounter = 0;
     },
 
     stopTrackingHostCounters():
       | {
-          hostDiffCounter: number,
           hostUpdateCounter: number,
         }
       | {
-          hostDiffCounter: number,
           hostCloneCounter: number,
         } {
       const result = useMutation
         ? {
-            hostDiffCounter,
             hostUpdateCounter,
           }
         : {
-            hostDiffCounter,
             hostCloneCounter,
           };
-      hostDiffCounter = 0;
       hostUpdateCounter = 0;
       hostCloneCounter = 0;
 
@@ -1245,9 +1262,7 @@ function createReactNoop(reconciler: Function, useMutation: boolean) {
           if (typeof child.text === 'string') {
             log(indent + '- ' + child.text);
           } else {
-            // $FlowFixMe - The child should've been refined now.
             log(indent + '- ' + child.type + '#' + child.id);
-            // $FlowFixMe - The child should've been refined now.
             logHostInstances(child.children, depth + 1);
           }
         }

@@ -253,7 +253,7 @@ const bundles = [
   {
     bundleTypes: __EXPERIMENTAL__ ? [FB_WWW_DEV, FB_WWW_PROD] : [],
     moduleType: RENDERER,
-    entry: 'react-server-dom-relay/src/ReactDOMServerFB.js',
+    entry: 'react-server-dom-fb/src/ReactDOMServerFB.js',
     global: 'ReactDOMServerStreaming',
     minifyWithProdErrorCodes: false,
     wrapWithModuleBoundaries: false,
@@ -386,7 +386,7 @@ const bundles = [
     global: 'ReactServerDOMClient',
     minifyWithProdErrorCodes: false,
     wrapWithModuleBoundaries: false,
-    externals: ['react'],
+    externals: ['react', 'react-dom'],
   },
   {
     bundleTypes: [NODE_DEV, NODE_PROD],
@@ -395,7 +395,7 @@ const bundles = [
     global: 'ReactServerDOMClient',
     minifyWithProdErrorCodes: false,
     wrapWithModuleBoundaries: false,
-    externals: ['react', 'util'],
+    externals: ['react', 'react-dom', 'util'],
   },
   {
     bundleTypes: [NODE_DEV, NODE_PROD],
@@ -404,7 +404,7 @@ const bundles = [
     global: 'ReactServerDOMClient',
     minifyWithProdErrorCodes: false,
     wrapWithModuleBoundaries: false,
-    externals: ['react', 'util'],
+    externals: ['react', 'react-dom', 'util'],
   },
   {
     bundleTypes: [NODE_DEV, NODE_PROD],
@@ -413,7 +413,7 @@ const bundles = [
     global: 'ReactServerDOMClient',
     minifyWithProdErrorCodes: false,
     wrapWithModuleBoundaries: false,
-    externals: ['react'],
+    externals: ['react', 'react-dom'],
   },
 
   /******* React Server DOM Webpack Plugin *******/
@@ -442,7 +442,7 @@ const bundles = [
   {
     bundleTypes: [NODE_ES2015],
     moduleType: RENDERER_UTILS,
-    entry: 'react-server-dom-webpack/src/ReactFlightWebpackNodeRegister.js',
+    entry: 'react-server-dom-webpack/src/ReactFlightWebpackNodeRegister',
     name: 'react-server-dom-webpack-node-register',
     global: 'ReactFlightWebpackNodeRegister',
     minifyWithProdErrorCodes: false,
@@ -450,68 +450,43 @@ const bundles = [
     externals: ['url', 'module'],
   },
 
-  /******* React Server DOM Relay Writer *******/
+  /******* React Server DOM ESM Server *******/
   {
-    bundleTypes: [FB_WWW_DEV, FB_WWW_PROD],
+    bundleTypes: [NODE_DEV, NODE_PROD],
     moduleType: RENDERER,
-    entry: 'react-server-dom-relay/server',
-    global: 'ReactFlightDOMRelayServer',
+    entry: 'react-server-dom-esm/server.node',
     minifyWithProdErrorCodes: false,
     wrapWithModuleBoundaries: false,
-    externals: [
-      'react',
-      'ReactFlightDOMRelayServerIntegration',
-      'JSResourceReferenceImpl',
-    ],
+    externals: ['react', 'util', 'async_hooks', 'react-dom'],
   },
 
-  /******* React Server DOM Relay Reader *******/
+  /******* React Server DOM ESM Client *******/
   {
-    bundleTypes: [FB_WWW_DEV, FB_WWW_PROD],
+    bundleTypes: [NODE_DEV, NODE_PROD, ESM_DEV, ESM_PROD],
     moduleType: RENDERER,
-    entry: 'react-server-dom-relay',
-    global: 'ReactFlightDOMRelayClient',
-    minifyWithProdErrorCodes: true,
-    wrapWithModuleBoundaries: false,
-    externals: [
-      'react',
-      'ReactFlightDOMRelayClientIntegration',
-      'JSResourceReferenceImpl',
-    ],
-  },
-
-  /******* React Server Native Relay Writer *******/
-  {
-    bundleTypes: [RN_FB_DEV, RN_FB_PROD],
-    moduleType: RENDERER,
-    entry: 'react-server-native-relay/server',
-    global: 'ReactFlightNativeRelayServer',
+    entry: 'react-server-dom-esm/client.browser',
     minifyWithProdErrorCodes: false,
     wrapWithModuleBoundaries: false,
-    externals: [
-      'react',
-      'ReactFlightNativeRelayServerIntegration',
-      'JSResourceReferenceImpl',
-      'ReactNativeInternalFeatureFlags',
-      'util',
-      'async_hooks',
-    ],
+    externals: ['react', 'react-dom'],
+  },
+  {
+    bundleTypes: [NODE_DEV, NODE_PROD],
+    moduleType: RENDERER,
+    entry: 'react-server-dom-esm/client.node',
+    minifyWithProdErrorCodes: false,
+    wrapWithModuleBoundaries: false,
+    externals: ['react', 'react-dom', 'util'],
   },
 
-  /******* React Server Native Relay Reader *******/
+  /******* React Server DOM ESM Node.js Loader *******/
   {
-    bundleTypes: [RN_FB_DEV, RN_FB_PROD],
-    moduleType: RENDERER,
-    entry: 'react-server-native-relay',
-    global: 'ReactFlightNativeRelayClient',
-    minifyWithProdErrorCodes: true,
+    bundleTypes: [ESM_PROD],
+    moduleType: RENDERER_UTILS,
+    entry: 'react-server-dom-esm/node-loader',
+    global: 'ReactServerESMNodeLoader',
+    minifyWithProdErrorCodes: false,
     wrapWithModuleBoundaries: false,
-    externals: [
-      'react',
-      'ReactFlightNativeRelayClientIntegration',
-      'JSResourceReferenceImpl',
-      'ReactNativeInternalFeatureFlags',
-    ],
+    externals: ['acorn'],
   },
 
   /******* React Suspense Test Utils *******/
@@ -930,6 +905,17 @@ const bundles = [
     moduleType: ISOMORPHIC,
     entry: 'scheduler/unstable_mock',
     global: 'SchedulerMock',
+    minifyWithProdErrorCodes: false,
+    wrapWithModuleBoundaries: false,
+    externals: ['ReactNativeInternalFeatureFlags'],
+  },
+
+  /******* React Scheduler Native *******/
+  {
+    bundleTypes: [NODE_DEV, NODE_PROD],
+    moduleType: ISOMORPHIC,
+    entry: 'scheduler/index.native',
+    global: 'SchedulerNative',
     minifyWithProdErrorCodes: false,
     wrapWithModuleBoundaries: false,
     externals: ['ReactNativeInternalFeatureFlags'],
