@@ -90,6 +90,7 @@ import {
   ConcurrentMode,
   StrictLegacyMode,
   StrictEffectsMode,
+  NoStrictPassiveEffectsMode,
 } from './ReactTypeOfMode';
 import {
   HostRoot,
@@ -1891,6 +1892,7 @@ function renderRootSync(root: FiberRoot, lanes: Lanes) {
     markRenderStarted(lanes);
   }
 
+  let didSuspendInShell = false;
   outer: do {
     try {
       if (
@@ -1916,6 +1918,13 @@ function renderRootSync(root: FiberRoot, lanes: Lanes) {
             workInProgressRootExitStatus = RootDidNotComplete;
             break outer;
           }
+          case SuspendedOnImmediate:
+          case SuspendedOnData: {
+            if (!didSuspendInShell && getSuspenseHandler() === null) {
+              didSuspendInShell = true;
+            }
+            // Intentional fallthrough
+          }
           default: {
             // Unwind then continue with the normal work loop.
             workInProgressSuspendedReason = NotSuspended;
@@ -1931,6 +1940,17 @@ function renderRootSync(root: FiberRoot, lanes: Lanes) {
       handleThrow(root, thrownValue);
     }
   } while (true);
+
+  // Check if something suspended in the shell. We use this to detect an
+  // infinite ping loop caused by an uncached promise.
+  //
+  // Only increment this counter once per synchronous render attempt across the
+  // whole tree. Even if there are many sibling components that suspend, this
+  // counter only gets incremented once.
+  if (didSuspendInShell) {
+    root.shellSuspendCounter++;
+  }
+
   resetContextDependencies();
 
   executionContext = prevExecutionContext;
@@ -3519,11 +3539,19 @@ function recursivelyTraverseAndDoubleInvokeEffectsInDEV(
 }
 
 // Unconditionally disconnects and connects passive and layout effects.
-function doubleInvokeEffectsOnFiber(root: FiberRoot, fiber: Fiber) {
+function doubleInvokeEffectsOnFiber(
+  root: FiberRoot,
+  fiber: Fiber,
+  shouldDoubleInvokePassiveEffects: boolean = true,
+) {
   disappearLayoutEffects(fiber);
-  disconnectPassiveEffect(fiber);
+  if (shouldDoubleInvokePassiveEffects) {
+    disconnectPassiveEffect(fiber);
+  }
   reappearLayoutEffects(root, fiber.alternate, fiber, false);
-  reconnectPassiveEffects(root, fiber, NoLanes, null, false);
+  if (shouldDoubleInvokePassiveEffects) {
+    reconnectPassiveEffects(root, fiber, NoLanes, null, false);
+  }
 }
 
 function doubleInvokeEffectsInDEVIfNecessary(
@@ -3540,7 +3568,11 @@ function doubleInvokeEffectsInDEVIfNecessary(
     if (fiber.flags & PlacementDEV) {
       setCurrentDebugFiberInDEV(fiber);
       if (isInStrictMode) {
-        doubleInvokeEffectsOnFiber(root, fiber);
+        doubleInvokeEffectsOnFiber(
+          root,
+          fiber,
+          (fiber.mode & NoStrictPassiveEffectsMode) === NoMode,
+        );
       }
       resetCurrentDebugFiberInDEV();
     } else {
